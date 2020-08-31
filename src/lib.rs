@@ -250,6 +250,12 @@ impl Context {
                     "Relations marked as @input cannot be derived from a rule."
                 )
             }
+            if rule.goal.fields.iter().any(Option::is_none) {
+                abort!(
+                    rule.goal.relation.span(),
+                    "Cannot have _ in goal atom of rule."
+                )
+            }
             rule.clauses.iter().for_each(|clause| {
                 if let Clause::Fact(fact) = clause {
                     check(&fact);
@@ -703,7 +709,9 @@ fn make_clause(
             let mut index_mode = Vec::new();
             for (i, field) in fact.fields.iter().enumerate() {
                 let idx = syn::Index::from(i);
-                if let Some(var) = is_datalog_var(field) {
+                if field.is_none() {
+                    index_mode.push(IndexMode::Free);
+                } else if let Some(var) = is_datalog_var(field.as_ref().unwrap()) {
                     let var_name = var.to_string();
                     if datalog_vars.contains(&var_name) {
                         index_mode.push(IndexMode::Bound);

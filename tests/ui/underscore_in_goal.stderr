@@ -1,0 +1,5 @@
+error: Cannot have _ in goal atom of rule.
+ --> $DIR/underscore_in_goal.rs:7:5
+  |
+7 |     Ok(_) <- Ok(_);
+  |     ^^

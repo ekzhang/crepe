@@ -102,7 +102,7 @@ impl Parse for Clause {
 pub struct Fact {
     pub relation: Ident,
     pub paren_token: token::Paren,
-    pub fields: Punctuated<Expr, Token![,]>,
+    pub fields: Punctuated<Option<Expr>, Token![,]>,
 }
 
 impl Parse for Fact {
@@ -111,7 +111,14 @@ impl Parse for Fact {
         Ok(Self {
             relation: input.parse()?,
             paren_token: parenthesized!(content in input),
-            fields: content.parse_terminated(Expr::parse)?,
+            fields: content.parse_terminated(|input| {
+                if input.peek(Token![_]) {
+                    let _: Token![_] = input.parse()?;
+                    Ok(None)
+                } else {
+                    input.parse().map(Some)
+                }
+            })?,
         })
     }
 }

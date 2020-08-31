@@ -21,6 +21,12 @@ mod datalog {
 
         Intermediate(_x, crepe, z) <- (true), (false), Intermediate(_x, crepe, z);
         Intermediate(42, y, 'c') <- (true), (false), Intermediate(_x, y, _z);
+
+        @output
+        struct Node(i32);
+        Node(x) <- Edge(x, _);
+        Node(x) <- Edge(_, x);
+        Unit() <- Edge(_, _);
     }
 }
 
