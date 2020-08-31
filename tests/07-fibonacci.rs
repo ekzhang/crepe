@@ -11,10 +11,10 @@ mod datalog {
         @output
         struct Fib(u32, u32);
 
-        Fib(0, 0) :- (true);
-        Fib(1, 1) :- (true);
+        Fib(0, 0) <- (true);
+        Fib(1, 1) <- (true);
 
-        Fib(n + 2, x + y) :- Fib(n, x), Fib(n + 1, y), (n <= 23);
+        Fib(n + 2, x + y) <- Fib(n, x), Fib(n + 1, y), (n <= 23);
     }
 
     pub fn run() -> Vec<(u32, u32)> {

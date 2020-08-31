@@ -63,8 +63,7 @@ impl Parse for Relation {
 #[derive(Clone)]
 pub struct Rule {
     pub goal: Fact,
-    pub colon_token: Token![:],
-    pub minus_token: Token![-],
+    pub arrow_token: Token![<-],
     pub clauses: Punctuated<Clause, Token![,]>,
     pub semi_token: Token![;],
 }
@@ -73,8 +72,7 @@ impl Parse for Rule {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(Self {
             goal: input.parse()?,
-            colon_token: input.parse()?,
-            minus_token: input.parse()?,
+            arrow_token: input.parse()?,
             clauses: Punctuated::parse_separated_nonempty(input)?,
             semi_token: input.parse()?,
         })

@@ -7,8 +7,8 @@ mod datalog {
         @output
         struct Fib(u32, u32);
 
-        Fib(0, 0, 2) :- (true);
-        Fib(1, 1) :- (true);
+        Fib(0, 0, 2) <- (true);
+        Fib(1, 1) <- (true);
     }
 }
 

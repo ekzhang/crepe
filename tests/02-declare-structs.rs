@@ -12,8 +12,8 @@ mod datalog {
         @output
         struct Tc(i32, i32);
 
-        Tc(x, y) :- Edge(x, y);
-        Tc(x, z) :- Edge(x, y), Tc(y, z);
+        Tc(x, y) <- Edge(x, y);
+        Tc(x, z) <- Edge(x, y), Tc(y, z);
     }
 
     pub fn run(_edges: &[(i32, i32)]) -> Vec<(i32, i32)> {

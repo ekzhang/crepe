@@ -34,8 +34,8 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 ///         @output
 ///         struct Tc(i32, i32);
 ///
-///         Tc(x, y) :- Edge(x, y);
-///         Tc(x, z) :- Edge(x, y), Tc(y, z);
+///         Tc(x, y) <- Edge(x, y);
+///         Tc(x, z) <- Edge(x, y), Tc(y, z);
 ///     }
 ///
 ///     pub fn run(edges: &[(i32, i32)]) -> Vec<(i32, i32)> {
@@ -48,7 +48,7 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 /// # fn main() {}
 /// ```
 /// Each `struct` in the program is turned into a Datalog relation, while each
-/// line of the form `goal :- clause1, clause2, ...;` defines a rule that can
+/// line of the form `goal <- clause1, clause2, ...;` defines a rule that can
 /// used in a logic programming setting to define new relations.
 ///
 /// In order for the engine to work, all relations must be tuple structs, and
@@ -71,10 +71,10 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 ///     @output
 ///     struct Fib(u32, u32);
 ///
-///     Fib(0, 0) :- (true);
-///     Fib(1, 1) :- (true);
+///     Fib(0, 0) <- (true);
+///     Fib(1, 1) <- (true);
 ///
-///     Fib(n + 2, x + y) :- Fib(n, x), Fib(n + 1, y), (n + 2 <= 25);
+///     Fib(n + 2, x + y) <- Fib(n, x), Fib(n + 1, y), (n + 2 <= 25);
 /// }
 /// #     pub fn run() -> Vec<(u32, u32)> {
 /// #         let mut output = Runtime::new()

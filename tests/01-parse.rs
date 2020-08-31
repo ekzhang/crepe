@@ -16,8 +16,8 @@ mod datalog {
         struct Intermediate(i32, u64, char);
         struct Unit();
 
-        Tc(x, y) :- Edge(x, y);
-        Tc(x, z) :- Edge(x, y), Tc(y, z), (z > 5);
+        Tc(x, y) <- Edge(x, y);
+        Tc(x, z) <- Edge(x, y), Tc(y, z), (z > 5);
     }
 }
 

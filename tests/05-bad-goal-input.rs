@@ -8,7 +8,7 @@ mod datalog {
         @input
         struct In(u32, u32);
 
-        In(0, 0) :- (true);
+        In(0, 0) <- (true);
     }
 }
 

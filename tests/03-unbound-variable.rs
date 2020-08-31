@@ -7,10 +7,10 @@ mod datalog {
         @output
         struct Fib(u32, u32);
 
-        Fib(0, 0) :- (true);
-        Fib(1, 1) :- (true);
+        Fib(0, 0) <- (true);
+        Fib(1, 1) <- (true);
 
-        Fib(n, x + y) :- Fib(n - 1, x), Fib(n - 2, y), (n <= 25);
+        Fib(n, x + y) <- Fib(n - 1, x), Fib(n - 2, y), (n <= 25);
     }
 }
 
