@@ -1,12 +1,12 @@
 // This test defines the basic Datalog syntax and ensures it parses.
 //
-// Not much is done besides checking that datalog_runtime! is defined,
+// Not much is done besides checking that datalog_crepe! is defined,
 // as well as not self-destructing with a compilation error.
 
 mod datalog {
-    use crepe::runtime;
+    use crepe::crepe;
 
-    runtime! {
+    crepe! {
         @input
         struct Edge(i32, i32);
 

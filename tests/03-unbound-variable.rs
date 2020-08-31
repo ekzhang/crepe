@@ -1,9 +1,9 @@
 // In this test, the variable named 'n' is used before binding in a clause.
 
 mod datalog {
-    use crepe::runtime;
+    use crepe::crepe;
 
-    runtime! {
+    crepe! {
         @output
         struct Fib(u32, u32);
 

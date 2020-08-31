@@ -5,9 +5,9 @@
 // and interpolation.
 
 mod datalog {
-    use crepe::runtime;
+    use crepe::crepe;
 
-    runtime! {
+    crepe! {
         @output
         struct Fib(u32, u32);
 
@@ -18,7 +18,7 @@ mod datalog {
     }
 
     pub fn run() -> Vec<(u32, u32)> {
-        let mut output = Runtime::new()
+        let mut output = Crepe::new()
             .run()
             .fib
             .into_iter()

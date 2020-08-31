@@ -2,9 +2,9 @@
 // though it is marked as an @input.
 
 mod datalog {
-    use crepe::runtime;
+    use crepe::crepe;
 
-    runtime! {
+    crepe! {
         @input
         struct In(u32, u32);
 

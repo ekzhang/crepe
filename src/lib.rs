@@ -4,7 +4,7 @@
 //! interoperates seamlessly with Rust programs.
 //!
 //! # Documentation
-//! See the [`runtime!`](macro.Runtime.html) macro for detailed documentation.
+//! See the [`crepe!`](macro.Crepe.html) macro for detailed documentation.
 
 extern crate proc_macro;
 
@@ -25,9 +25,9 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 /// A program to calculate transitive closure might be written as:
 /// ```
 /// mod datalog {
-///     use crepe::runtime;
+///     use crepe::crepe;
 ///
-///     runtime! {
+///     crepe! {
 ///         @input
 ///         struct Edge(i32, i32);
 ///
@@ -39,7 +39,7 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 ///     }
 ///
 ///     pub fn run(edges: &[(i32, i32)]) -> Vec<(i32, i32)> {
-///         let output = Runtime::new()
+///         let output = Crepe::new()
 ///             .edge(edges.iter().map(|&(a, b)| Edge(a, b)))
 ///             .run();
 ///         output.tc.into_iter().map(|Tc(a, b)| (a, b)).collect()
@@ -66,8 +66,8 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 /// numbers using arithmetic functors:
 /// ```
 /// # mod datalog {
-/// #     use crepe::runtime;
-/// runtime! {
+/// #     use crepe::crepe;
+/// crepe! {
 ///     @output
 ///     struct Fib(u32, u32);
 ///
@@ -77,7 +77,7 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 ///     Fib(n + 2, x + y) <- Fib(n, x), Fib(n + 1, y), (n + 2 <= 25);
 /// }
 /// #     pub fn run() -> Vec<(u32, u32)> {
-/// #         let mut output = Runtime::new()
+/// #         let mut output = Crepe::new()
 /// #             .run()
 /// #             .fib
 /// #             .into_iter()
@@ -128,12 +128,12 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 ///
 /// # Hygiene
 /// In addition to the relation structs, this macro generates implementations
-/// of private `Runtime` and `RuntimeOutput` structs. Therefore, it is
+/// of private `Crepe` and `CrepeOutput` structs. Therefore, it is
 /// recommended to place each Datalog program within its own module, to prevent
 /// name collisions.
 #[proc_macro]
 #[proc_macro_error]
-pub fn runtime(input: TokenStream) -> TokenStream {
+pub fn crepe(input: TokenStream) -> TokenStream {
     let program = parse_macro_input!(input as Program);
     let context = Context::new(program);
 
@@ -297,10 +297,10 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
 // Generated code should roughly look something like:
 // ```ignore
 // #[derive(::core::default::Default)]
-// struct Runtime {
+// struct Crepe {
 //     edge: ::std::vec::Vec<Edge>,
 // }
-// impl Runtime {
+// impl Crepe {
 //     fn new() -> Self {
 //         ::core::default::Default::default()
 //     }
@@ -329,7 +329,7 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
 
     quote! {
         #[derive(::core::default::Default)]
-        struct Runtime {
+        struct Crepe {
             #fields
         }
     }
@@ -339,7 +339,7 @@ fn make_runtime_impl(context: &Context) -> proc_macro2::TokenStream {
     let builders = make_builders(&context);
     let run = make_run(&context);
     quote! {
-        impl Runtime {
+        impl Crepe {
             fn new() -> Self {
                 ::core::default::Default::default()
             }
@@ -369,7 +369,7 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///
 /// Here's an example of what might be generated for transitive closure:
 /// ```ignore
-/// fn run(&self) -> RuntimeOutput {
+/// fn run(&self) -> CrepeOutput {
 ///     // Relations
 ///     let mut __edge: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
 ///     let mut __edge_update: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
@@ -424,7 +424,7 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///     }
 ///
 ///     // Return value
-///     RuntimeOutput {
+///     CrepeOutput {
 ///         tc: __tc.into_iter().collect(),
 ///     }
 /// }
@@ -609,14 +609,14 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             .collect();
 
         quote! {
-            RuntimeOutput {
+            CrepeOutput {
                 #output_fields
             }
         }
     };
 
     quote! {
-        fn run(&self) -> RuntimeOutput {
+        fn run(&self) -> CrepeOutput {
             #initialize
             #main_loop
             #output
@@ -785,7 +785,7 @@ fn make_output_decl(context: &Context) -> proc_macro2::TokenStream {
         .collect();
 
     quote! {
-        struct RuntimeOutput {
+        struct CrepeOutput {
             #fields
         }
     }

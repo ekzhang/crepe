@@ -1,9 +1,9 @@
 // In this test, the relation 'Fib' is given the wrong number of arguments.
 
 mod datalog {
-    use crepe::runtime;
+    use crepe::crepe;
 
-    runtime! {
+    crepe! {
         @output
         struct Fib(u32, u32);
 

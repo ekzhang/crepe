@@ -3,9 +3,9 @@
 // correct indices to be generated for the `Tc` relation.
 
 mod datalog {
-    use crepe::runtime;
+    use crepe::crepe;
 
-    runtime! {
+    crepe! {
         @input
         struct Edge(i32, i32);
 
@@ -17,7 +17,7 @@ mod datalog {
     }
 
     pub fn run(edges: &[(i32, i32)]) -> Vec<(i32, i32)> {
-        let output = Runtime::new()
+        let output = Crepe::new()
             .edge(edges.iter().map(|&(a, b)| Edge(a, b)))
             .run();
         output.tc.into_iter().map(|Tc(a, b)| (a, b)).collect()

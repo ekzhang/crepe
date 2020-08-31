@@ -3,9 +3,9 @@
 // of the module as normal tuple-structs.
 
 mod datalog {
-    use crepe::runtime;
+    use crepe::crepe;
 
-    runtime! {
+    crepe! {
         @input
         struct Edge(i32, i32);
 

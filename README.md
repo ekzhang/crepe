@@ -10,12 +10,12 @@ interoperates seamlessly with Rust programs.
 ## Example
 
 The program below computes the transitive closure of a directed graph. Note
-the use of the `runtime!` macro.
+the use of the `crepe!` macro.
 
 ```rust
-use crepe::runtime;
+use crepe::crepe;
 
-runtime! {
+crepe! {
     @input
     struct Edge(i32, i32);
 
@@ -28,7 +28,7 @@ runtime! {
 
 fn main() {
     let edges = vec![Edge(1, 2), Edge(2, 3), Edge(3, 4), Edge(2, 5)];
-    let result = Runtime::new().edge(edges).run();
+    let result = Crepe::new().edge(edges).run();
     for Reachable(x, y) in result.reachable {
         println!("node {} can reach node {}", x, y);
     }
