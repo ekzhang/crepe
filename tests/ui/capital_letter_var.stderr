@@ -1,0 +1,11 @@
+error[E0425]: cannot find value `Not_a_variable` in this scope
+ --> $DIR/capital_letter_var.rs:8:30
+  |
+8 |     Ok(Not_a_variable) <- Ok(Not_a_variable);
+  |                              ^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `Not_a_variable` in this scope
+ --> $DIR/capital_letter_var.rs:8:8
+  |
+8 |     Ok(Not_a_variable) <- Ok(Not_a_variable);
+  |        ^^^^^^^^^^^^^^ not found in this scope

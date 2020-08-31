@@ -1,23 +1,23 @@
 error[E0425]: cannot find value `n` in this scope
-  --> $DIR/03-unbound-variable.rs:13:30
+  --> $DIR/unbound_variable.rs:13:30
    |
 13 |         Fib(n, x + y) <- Fib(n - 1, x), Fib(n - 2, y), (n <= 25);
    |                              ^ not found in this scope
 
 error[E0425]: cannot find value `n` in this scope
-  --> $DIR/03-unbound-variable.rs:13:45
+  --> $DIR/unbound_variable.rs:13:45
    |
 13 |         Fib(n, x + y) <- Fib(n - 1, x), Fib(n - 2, y), (n <= 25);
    |                                             ^ help: a local variable with a similar name exists: `x`
 
 error[E0425]: cannot find value `n` in this scope
-  --> $DIR/03-unbound-variable.rs:13:57
+  --> $DIR/unbound_variable.rs:13:57
    |
 13 |         Fib(n, x + y) <- Fib(n - 1, x), Fib(n - 2, y), (n <= 25);
    |                                                         ^ help: a local variable with a similar name exists: `x`
 
 error[E0425]: cannot find value `n` in this scope
-  --> $DIR/03-unbound-variable.rs:13:13
+  --> $DIR/unbound_variable.rs:13:13
    |
 13 |         Fib(n, x + y) <- Fib(n - 1, x), Fib(n - 2, y), (n <= 25);
    |             ^ help: a local variable with a similar name exists: `x`

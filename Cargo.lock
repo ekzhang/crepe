@@ -12,12 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dissimilar"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc4b29f4b9bb94bf267d57269fd0706d343a160937108e9619fe380645428abb"
-
-[[package]]
 name = "glob"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -149,7 +143,6 @@ version = "1.0.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48105a4deaf74163c017939b45ef7322fba46e8b17281528039b0beb04235e92"
 dependencies = [
- "dissimilar",
  "glob",
  "lazy_static",
  "serde",

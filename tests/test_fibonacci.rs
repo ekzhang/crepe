@@ -29,7 +29,8 @@ mod datalog {
     }
 }
 
-fn main() {
+#[test]
+fn test_fibonacci() {
     let results = datalog::run();
     assert_eq!(
         results,

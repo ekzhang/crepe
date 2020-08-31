@@ -22,6 +22,7 @@ mod datalog {
     }
 }
 
-fn main() {
+#[test]
+fn test_declare_structs() {
     assert_eq!(datalog::run(&[]), vec![]);
 }

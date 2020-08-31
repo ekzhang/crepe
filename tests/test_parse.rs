@@ -1,6 +1,6 @@
 // This test defines the basic Datalog syntax and ensures it parses.
 //
-// Not much is done besides checking that datalog_crepe! is defined,
+// Not much is done besides checking that crepe::crepe! is defined,
 // as well as not self-destructing with a compilation error.
 
 mod datalog {
@@ -18,7 +18,11 @@ mod datalog {
 
         Tc(x, y) <- Edge(x, y);
         Tc(x, z) <- Edge(x, y), Tc(y, z), (z > 5);
+
+        Intermediate(_x, crepe, z) <- (true), (false), Intermediate(_x, crepe, z);
+        Intermediate(42, y, 'c') <- (true), (false), Intermediate(_x, y, _z);
     }
 }
 
-fn main() {}
+#[test]
+fn test_parse() {}

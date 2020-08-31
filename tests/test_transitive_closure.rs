@@ -24,7 +24,8 @@ mod datalog {
     }
 }
 
-fn main() {
+#[test]
+fn test_transitive_closure() {
     let edges = vec![(1, 2), (2, 3), (3, 4), (2, 5)];
     let expected = vec![
         (1, 2),
