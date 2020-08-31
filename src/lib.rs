@@ -392,7 +392,7 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///
 /// Here's an example of what might be generated for transitive closure:
 /// ```ignore
-/// fn run(&self) -> (::std::collections::HashSet<Tc>,) {
+/// fn run(self) -> (::std::collections::HashSet<Tc>,) {
 ///     // Relations
 ///     let mut __edge: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
 ///     let mut __edge_update: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
@@ -404,7 +404,7 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///         ::std::collections::HashMap::new();
 ///
 ///     // Input relations
-///     __edge_update.extend(&self.edge);
+///     __edge_update.extend(self.edge);
 ///
 ///     // Main loop, single stratum for simplicity
 ///     let mut __crepe_first_iteration = true;
@@ -607,7 +607,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let lower = to_lowercase(&rel.name);
             let var_update = format_ident!("__{}_update", lower);
             quote! {
-                #var_update.extend(&self.#lower);
+                #var_update.extend(self.#lower);
             }
         });
         init_rels
@@ -628,7 +628,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
 
     let output_ty = make_output_ty(&context);
     quote! {
-        fn run(&self) -> #output_ty {
+        fn run(self) -> #output_ty {
             #initialize
             #main_loop
             #output
