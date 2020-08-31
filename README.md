@@ -27,9 +27,11 @@ crepe! {
 }
 
 fn main() {
-    let edges = vec![Edge(1, 2), Edge(2, 3), Edge(3, 4), Edge(2, 5)];
-    let result = Crepe::new().edge(edges).run();
-    for Reachable(x, y) in result.reachable {
+    let mut runtime = Crepe::new();
+    runtime.extend(&[Edge(1, 2), Edge(2, 3), Edge(3, 4), Edge(2, 5)]);
+
+    let (reachable,) = runtime.run();
+    for Reachable(x, y) in reachable {
         println!("node {} can reach node {}", x, y);
     }
 }

@@ -17,10 +17,10 @@ mod datalog {
     }
 
     pub fn run(edges: &[(i32, i32)]) -> Vec<(i32, i32)> {
-        let output = Crepe::new()
-            .edge(edges.iter().map(|&(a, b)| Edge(a, b)))
-            .run();
-        output.tc.into_iter().map(|Tc(a, b)| (a, b)).collect()
+        let mut runtime = Crepe::new();
+        runtime.extend(edges.iter().map(|&(a, b)| Edge(a, b)));
+        let (tc,) = runtime.run();
+        tc.into_iter().map(|Tc(a, b)| (a, b)).collect()
     }
 }
 

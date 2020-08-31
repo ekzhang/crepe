@@ -18,12 +18,8 @@ mod datalog {
     }
 
     pub fn run() -> Vec<(u32, u32)> {
-        let mut output = Crepe::new()
-            .run()
-            .fib
-            .into_iter()
-            .map(|Fib(x, y)| (x, y))
-            .collect::<Vec<_>>();
+        let (fib,) = Crepe::new().run();
+        let mut output: Vec<_> = fib.into_iter().map(|Fib(x, y)| (x, y)).collect();
         output.sort();
         output
     }

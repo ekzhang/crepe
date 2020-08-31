@@ -39,10 +39,10 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 ///     }
 ///
 ///     pub fn run(edges: &[(i32, i32)]) -> Vec<(i32, i32)> {
-///         let output = Crepe::new()
-///             .edge(edges.iter().map(|&(a, b)| Edge(a, b)))
-///             .run();
-///         output.tc.into_iter().map(|Tc(a, b)| (a, b)).collect()
+///         let mut runtime = Crepe::new();
+///         runtime.extend(edges.iter().map(|&(a, b)| Edge(a, b)));
+///         let (tc,) = runtime.run();
+///         tc.into_iter().map(|Tc(a, b)| (a, b)).collect()
 ///     }
 /// }
 /// # fn main() {}
@@ -77,12 +77,8 @@ use parse::{Clause, Fact, Program, Relation, Rule};
 ///     Fib(n + 2, x + y) <- Fib(n, x), Fib(n + 1, y), (n + 2 <= 25);
 /// }
 /// #     pub fn run() -> Vec<(u32, u32)> {
-/// #         let mut output = Crepe::new()
-/// #             .run()
-/// #             .fib
-/// #             .into_iter()
-/// #             .map(|Fib(x, y)| (x, y))
-/// #             .collect::<Vec<_>>();
+/// #         let (fib,) = Crepe::new().run();
+/// #         let mut output: Vec<_> = fib.into_iter().map(|Fib(x, y)| (x, y)).collect();
 /// #         output.sort();
 /// #         output
 /// #     }
@@ -140,13 +136,11 @@ pub fn crepe(input: TokenStream) -> TokenStream {
     let struct_decls = make_struct_decls(&context);
     let runtime_decl = make_runtime_decl(&context);
     let runtime_impl = make_runtime_impl(&context);
-    let output_decl = make_output_decl(&context);
 
     let expanded = quote! {
         #struct_decls
         #runtime_decl
         #runtime_impl
-        #output_decl
     };
 
     expanded.into()
@@ -156,6 +150,7 @@ pub fn crepe(input: TokenStream) -> TokenStream {
 struct Context {
     rels_input: HashMap<String, Relation>,
     rels_output: HashMap<String, Relation>,
+    output_order: Vec<Ident>,
     rels_intermediate: HashMap<String, Relation>,
     rules: Vec<Rule>,
 }
@@ -193,6 +188,7 @@ impl Context {
         let mut rels_output = HashMap::new();
         let mut rels_intermediate = HashMap::new();
         let mut rel_names = HashSet::new();
+        let mut output_order = Vec::new();
 
         program.relations.into_iter().for_each(|relation| {
             let name = relation.name.to_string();
@@ -206,6 +202,7 @@ impl Context {
                         rels_input.insert(name, relation);
                     }
                     "output" => {
+                        output_order.push(relation.name.clone());
                         rels_output.insert(name, relation);
                     }
                     s => abort!(
@@ -269,6 +266,7 @@ impl Context {
         Self {
             rels_input,
             rels_output,
+            output_order,
             rels_intermediate,
             rules,
         }
@@ -304,12 +302,16 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
 //     fn new() -> Self {
 //         ::core::default::Default::default()
 //     }
-//     fn edge(&mut self, edge: impl IntoIterator<Item = Edge>) -> &mut Self {
-//         self.edge.extend(edge)
-//         self
-//     }
 //     fn run(self) -> Output {
 //         // core logic here
+//     }
+// }
+// impl ::core::iter::Extend<Edge> for Crepe {
+//     fn extend<T>(&mut self, iter: T)
+//     where
+//         T: ::core::iter::IntoIterator<Item = Edge>,
+//     {
+//         self.edge.extend(iter);
 //     }
 // }
 // ```
@@ -336,31 +338,46 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
 }
 
 fn make_runtime_impl(context: &Context) -> proc_macro2::TokenStream {
-    let builders = make_builders(&context);
+    let builders = make_extend(&context);
     let run = make_run(&context);
     quote! {
         impl Crepe {
             fn new() -> Self {
                 ::core::default::Default::default()
             }
-
-            #builders
             #run
         }
+        #builders
     }
 }
 
-fn make_builders(context: &Context) -> proc_macro2::TokenStream {
-    context.rels_input.values().map(|relation| {
-        let name = &relation.name;
-        let lower = to_lowercase(name);
-        quote! {
-            fn #lower(&mut self, #lower: impl ::core::iter::IntoIterator<Item = #name>) -> &mut Self {
-                self.#lower.extend(#lower);
-                self
+fn make_extend(context: &Context) -> proc_macro2::TokenStream {
+    context
+        .rels_input
+        .values()
+        .map(|relation| {
+            let name = &relation.name;
+            let lower = to_lowercase(name);
+            quote! {
+                impl ::core::iter::Extend<#name> for Crepe {
+                    fn extend<T>(&mut self, iter: T)
+                    where
+                        T: ::core::iter::IntoIterator<Item = #name>,
+                    {
+                        self.#lower.extend(iter);
+                    }
+                }
+                impl<'a> ::core::iter::Extend<&'a #name> for Crepe {
+                    fn extend<T>(&mut self, iter: T)
+                    where
+                        T: ::core::iter::IntoIterator<Item = &'a #name>,
+                    {
+                        self.extend(iter.into_iter().copied());
+                    }
+                }
             }
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 /// This is the primary method, which consumes the builder. It should compile
@@ -369,7 +386,7 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///
 /// Here's an example of what might be generated for transitive closure:
 /// ```ignore
-/// fn run(&self) -> CrepeOutput {
+/// fn run(&self) -> (::std::collections::HashSet<Tc>,) {
 ///     // Relations
 ///     let mut __edge: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
 ///     let mut __edge_update: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
@@ -424,9 +441,7 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///     }
 ///
 ///     // Return value
-///     CrepeOutput {
-///         tc: __tc.into_iter().collect(),
-///     }
+///     (__tc,)
 /// }
 /// ```
 /// Please note that this example uses naive evaluation for simplicity, but we
@@ -596,27 +611,18 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     };
 
     let output = {
-        let output_fields: proc_macro2::TokenStream = context
-            .rels_output
-            .values()
-            .map(|rel| {
-                let lower = to_lowercase(&rel.name);
-                let var_name = format_ident!("__{}", lower);
-                quote! {
-                    #lower: #var_name.into_iter().collect(),
-                }
-            })
-            .collect();
-
+        let output_fields = context.output_order.iter().map(|name| {
+            let lower = to_lowercase(name);
+            format_ident!("__{}", lower)
+        });
         quote! {
-            CrepeOutput {
-                #output_fields
-            }
+            (#(#output_fields,)*)
         }
     };
 
+    let output_ty = make_output_ty(&context);
     quote! {
-        fn run(&self) -> CrepeOutput {
+        fn run(&self) -> #output_ty {
             #initialize
             #main_loop
             #output
@@ -771,23 +777,10 @@ fn make_clause(
     }
 }
 
-fn make_output_decl(context: &Context) -> proc_macro2::TokenStream {
-    let fields: proc_macro2::TokenStream = context
-        .rels_output
-        .values()
-        .map(|relation| {
-            let name = &relation.name;
-            let lower = to_lowercase(name);
-            quote! {
-                #lower: ::std::vec::Vec<#name>,
-            }
-        })
-        .collect();
-
+fn make_output_ty(context: &Context) -> proc_macro2::TokenStream {
+    let fields = &context.output_order;
     quote! {
-        struct CrepeOutput {
-            #fields
-        }
+        (#(::std::collections::HashSet<#fields>,)*)
     }
 }
 
