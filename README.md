@@ -42,8 +42,20 @@ fn main() {
 }
 ```
 
+## Features
+
+- Automatic generation of indices for relations
+- Arbitrary Rust expression syntax allowed in rules
+- Builder pattern for setting `@input` relations
+- Very fast, compiled directly with the rest of your Rust code
+
+In the future, we want to support:
+
+- Semi-naive evaluation
+- Stratified negation
+
 ## Acknowledgements
 
 This work was heavily inspired by [Souffle](https://souffle-lang.github.io/)
-and [Formulog](https://github.com/HarvardPL/formulog), which both use the same
-model of Datalog compilation for static analysis.
+and [Formulog](https://github.com/HarvardPL/formulog), which both use similar
+models of Datalog compilation for static analysis.
