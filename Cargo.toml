@@ -2,6 +2,12 @@
 name = "crepe"
 version = "0.1.0"
 authors = ["Eric Zhang <ekzhang1@gmail.com>"]
+license = "MIT OR Apache-2.0"
+description = "Datalog in Rust as a procedural macro"
+repository = "https://github.com/ekzhang/crepe"
+documentation = "https://docs.rs/crepe"
+keywords = ["datalog", "analysis", "logic-programming", "compiler"]
+readme = "README.md"
 edition = "2018"
 autotests = false
 
