@@ -37,6 +37,7 @@ fn main() {
 
 ## Features
 
+- Semi-naive evaluation
 - Automatic generation of indices for relations
 - Arbitrary Rust expression syntax allowed in rules
 - Builder pattern for setting `@input` relations
@@ -44,7 +45,6 @@ fn main() {
 
 In the future, we want to support:
 
-- Semi-naive evaluation
 - Stratified negation
 
 ## Acknowledgements

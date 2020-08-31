@@ -377,7 +377,8 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///     let mut __tc_update: ::std::collections::HashSet<Tc> = ::std::collections::HashSet::new();
 ///
 ///     // Indices
-///     let mut __tc_index_bf: ::std::collections::HashMap<(i32,), ::std::vec::Vec<Tc>> = ::std::collections::HashMap::new();
+///     let mut __tc_index_bf: ::std::collections::HashMap<(i32,), ::std::vec::Vec<Tc>> =
+///         ::std::collections::HashMap::new();
 ///
 ///     // Input relations
 ///     __edge_update.extend(&self.edge);
@@ -385,7 +386,6 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///     // Main loop, single stratum for simplicity
 ///     let mut __crepe_first_iteration = true;
 ///     while __crepe_first_iteration || !(__edge_update.is_empty() && __tc_update.is_empty()) {
-///         __crepe_first_iteration = false;
 ///         __tc.extend(&__tc_update);
 ///         for &__crepe_var in __tc_update.iter() {
 ///             __tc_index_bf.entry((__crepe_var.0,)).or_default().push(__crepe_var);
@@ -399,7 +399,7 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///             let x = __crepe_var_0.0;
 ///             let y = __crepe_var_0.1;
 ///             let __crepe_goal = Tc(x, y);
-///             if (!__tc.contains(&__crepe_goal)) {
+///             if !__tc.contains(&__crepe_goal) {
 ///                 __tc_new.insert(__crepe_goal);
 ///             }
 ///         }
@@ -411,7 +411,7 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///                 for &__crepe_var_1 in __iter_1.iter() {
 ///                     let z = __crepe_var_1.1;
 ///                     let __crepe_goal = Tc(x, z);
-///                     if (!__tc.contains(&__crepe_goal)) {
+///                     if !__tc.contains(&__crepe_goal) {
 ///                         __tc_new.insert(__crepe_goal);
 ///                     }
 ///                 }
@@ -420,6 +420,7 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///
 ///         __tc_update = __tc_new;
 ///         __edge_update = __edge_new;
+///         __crepe_first_iteration = false;
 ///     }
 ///
 ///     // Return value
@@ -428,6 +429,8 @@ fn make_builders(context: &Context) -> proc_macro2::TokenStream {
 ///     }
 /// }
 /// ```
+/// Please note that this example uses naive evaluation for simplicity, but we
+/// actually generate code for semi-naive evaluation.
 fn make_run(context: &Context) -> proc_macro2::TokenStream {
     let all_rels = context
         .rels_input
@@ -487,17 +490,24 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
                     .expect("index relation should be found in context");
                 let rel_update = format_ident!("__{}_update", to_lowercase(&rel.name));
                 let index_name = Ident::new(&index.to_string(), rel.name.span());
-                let bound_pos = index
+                let index_name_update = format_ident!("{}_update", index_name);
+                let bound_pos: Vec<_> = index
                     .mode
                     .iter()
                     .enumerate()
                     .filter_map(|(i, mode)| match mode {
                         IndexMode::Bound => Some(syn::Index::from(i)),
                         IndexMode::Free => None,
-                    });
+                    })
+                    .collect();
                 quote! {
+                    #index_name_update.clear();
                     for &__crepe_var in #rel_update.iter() {
                         #index_name
+                            .entry((#(__crepe_var.#bound_pos,)*))
+                            .or_default()
+                            .push(__crepe_var);
+                        #index_name_update
                             .entry((#(__crepe_var.#bound_pos,)*))
                             .or_default()
                             .push(__crepe_var);
@@ -522,11 +532,11 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
         quote! {
             let mut __crepe_first_iteration = true;
             while __crepe_first_iteration || !(#empty_cond) {
-                __crepe_first_iteration = false;
                 #updates
                 #new_decls
                 #rules
                 #set_update_to_new
+                __crepe_first_iteration = false;
             }
         }
     };
@@ -553,16 +563,21 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
                 .expect("index relation should be found in context");
             let rel_name = &rel.name;
             let index_name = Ident::new(&index.to_string(), rel.name.span());
-            let key_type = index
+            let index_name_update = format_ident!("{}_update", index_name);
+            let key_type: Vec<_> = index
                 .mode
                 .iter()
                 .zip(rel.fields.iter())
                 .filter_map(|(mode, ty)| match mode {
                     IndexMode::Bound => Some(ty),
                     IndexMode::Free => None,
-                });
+                })
+                .collect();
             quote! {
                 let mut #index_name:
+                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
+                    ::std::collections::HashMap::new();
+                let mut #index_name_update:
                     ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
                     ::std::collections::HashMap::new();
             }
@@ -610,101 +625,150 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
 }
 
 fn make_rule(rule: &Rule, indices: &mut HashSet<Index>) -> proc_macro2::TokenStream {
-    type QuoteWrapper = dyn Fn(proc_macro2::TokenStream) -> proc_macro2::TokenStream;
-
-    let mut datalog_vars: HashSet<String> = HashSet::new();
-    let fragments: Vec<_> = rule
-        .clauses
-        .iter()
-        .cloned()
-        .map::<Box<QuoteWrapper>, _>(|clause| match clause {
-            Clause::Fact(fact) => {
-                let name = &fact.relation;
-                let rel = format_ident!("__{}", &to_lowercase(name));
-                let mut setters = Vec::new();
-                let mut index_mode = Vec::new();
-                for (i, field) in fact.fields.iter().enumerate() {
-                    let idx = syn::Index::from(i);
-                    if let Some(var) = is_datalog_var(field) {
-                        let var_name = var.to_string();
-                        if datalog_vars.contains(&var_name) {
-                            index_mode.push(IndexMode::Bound);
-                        } else {
-                            index_mode.push(IndexMode::Free);
-                            datalog_vars.insert(var_name);
-                            setters.push(quote! {
-                                let #field = __crepe_var.#idx;
-                            });
-                        }
-                    } else {
-                        index_mode.push(IndexMode::Bound);
-                    }
-                }
-                let setters: proc_macro2::TokenStream = setters.into_iter().collect();
-
-                if !index_mode.contains(&IndexMode::Bound) {
-                    // If no fields are bound, we don't need an index
-                    Box::new(move |body| {
-                        quote_spanned! {fact.relation.span()=>
-                            for __crepe_var in #rel.iter() {
-                                #setters
-                                #body
-                            }
-                        }
-                    })
-                } else {
-                    // Otherwise, we're going to need an index!
-                    let bound_fields: Vec<_> = index_mode
-                        .iter()
-                        .zip(fact.fields.iter())
-                        .filter_map(|(mode, field)| match mode {
-                            IndexMode::Bound => Some(field.clone()),
-                            IndexMode::Free => None,
-                        })
-                        .collect();
-                    let index = Index {
-                        name: name.to_string(),
-                        mode: index_mode,
-                    };
-                    let index_name = Ident::new(&index.to_string(), name.span());
-                    indices.insert(index);
-                    Box::new(move |body| {
-                        quote_spanned! {fact.relation.span()=>
-                            if let Some(__crepe_iter) = #index_name.get(&(#(#bound_fields,)*)) {
-                                for &__crepe_var in __crepe_iter.iter() {
-                                    #setters
-                                    #body
-                                }
-                            }
-                        }
-                    })
-                }
-            }
-            Clause::Expr(expr) => Box::new(move |body| {
-                quote! {
-                    #[allow(unused_parens)]
-                    if #expr { #body }
-                }
-            }),
-        })
-        .collect();
-
-    let mut retval = {
+    let goal = {
         let relation = &rule.goal.relation;
         let fields = &rule.goal.fields;
         let name = format_ident!("__{}", to_lowercase(relation));
         let name_new = format_ident!("__{}_new", to_lowercase(relation));
         quote! {
             let __crepe_goal = #relation(#fields);
-            if (!#name.contains(&__crepe_goal)) {
+            if !#name.contains(&__crepe_goal) {
                 #name_new.insert(__crepe_goal);
             }
         }
     };
-    for wrapper in fragments.into_iter().rev() {
-        retval = wrapper(retval);
+    let fact_positions: Vec<_> = rule
+        .clauses
+        .iter()
+        .enumerate()
+        .filter_map(|(i, clause)| match clause {
+            Clause::Fact(_) => Some(i),
+            Clause::Expr(_) => None,
+        })
+        .collect();
+    if fact_positions.is_empty() {
+        // Purely an expression, so we only need to evaluate it once
+        let mut datalog_vars: HashSet<String> = HashSet::new();
+        let fragments: Vec<_> = rule
+            .clauses
+            .iter()
+            .cloned()
+            .map(|clause| make_clause(clause, false, &mut datalog_vars, indices))
+            .collect();
+        let eval_loop = fragments.into_iter().rev().fold(goal, |x, f| f(x));
+        quote! {
+            if __crepe_first_iteration {
+                #eval_loop
+            }
+        }
+    } else {
+        // Rule has one or more facts, so we use semi-naive evaluation
+        let mut variants = Vec::new();
+        for update_position in fact_positions {
+            let mut datalog_vars: HashSet<String> = HashSet::new();
+            let fragments: Vec<_> = rule
+                .clauses
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(i, clause)| {
+                    make_clause(clause, update_position == i, &mut datalog_vars, indices)
+                })
+                .collect();
+            let eval_loop = fragments.into_iter().rev().fold(goal.clone(), |x, f| f(x));
+            variants.push(eval_loop);
+        }
+        variants.into_iter().collect()
     }
-    retval
+}
+
+type QuoteWrapper = dyn Fn(proc_macro2::TokenStream) -> proc_macro2::TokenStream;
+
+fn make_clause(
+    clause: Clause,
+    only_update: bool,
+    datalog_vars: &mut HashSet<String>,
+    indices: &mut HashSet<Index>,
+) -> Box<QuoteWrapper> {
+    match clause {
+        Clause::Fact(fact) => {
+            let name = &fact.relation;
+            let mut setters = Vec::new();
+            let mut index_mode = Vec::new();
+            for (i, field) in fact.fields.iter().enumerate() {
+                let idx = syn::Index::from(i);
+                if let Some(var) = is_datalog_var(field) {
+                    let var_name = var.to_string();
+                    if datalog_vars.contains(&var_name) {
+                        index_mode.push(IndexMode::Bound);
+                    } else {
+                        index_mode.push(IndexMode::Free);
+                        datalog_vars.insert(var_name);
+                        setters.push(quote! {
+                            let #field = __crepe_var.#idx;
+                        });
+                    }
+                } else {
+                    index_mode.push(IndexMode::Bound);
+                }
+            }
+            let setters: proc_macro2::TokenStream = setters.into_iter().collect();
+
+            if !index_mode.contains(&IndexMode::Bound) {
+                let mut rel = format_ident!("__{}", &to_lowercase(name));
+                if only_update {
+                    rel = format_ident!("{}_update", rel);
+                }
+                // If no fields are bound, we don't need an index
+                Box::new(move |body| {
+                    quote_spanned! {fact.relation.span()=>
+                        for __crepe_var in #rel.iter() {
+                            #setters
+                            #body
+                        }
+                    }
+                })
+            } else {
+                // Otherwise, we're going to need an index!
+                let bound_fields: Vec<_> = index_mode
+                    .iter()
+                    .zip(fact.fields.iter())
+                    .filter_map(|(mode, field)| match mode {
+                        IndexMode::Bound => Some(field.clone()),
+                        IndexMode::Free => None,
+                    })
+                    .collect();
+                let index = Index {
+                    name: name.to_string(),
+                    mode: index_mode,
+                };
+                let mut index_name = Ident::new(&index.to_string(), name.span());
+                if only_update {
+                    index_name = format_ident!("{}_update", index_name);
+                }
+                indices.insert(index);
+                Box::new(move |body| {
+                    quote_spanned! {fact.relation.span()=>
+                        if let Some(__crepe_iter) = #index_name.get(&(#(#bound_fields,)*)) {
+                            for &__crepe_var in __crepe_iter.iter() {
+                                #setters
+                                #body
+                            }
+                        }
+                    }
+                })
+            }
+        }
+        Clause::Expr(expr) => {
+            assert!(!only_update);
+            Box::new(move |body| {
+                quote! {
+                    #[allow(unused_parens)]
+                    if #expr { #body }
+                }
+            })
+        }
+    }
 }
 
 fn make_output_decl(context: &Context) -> proc_macro2::TokenStream {
