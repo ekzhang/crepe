@@ -13,32 +13,25 @@ The program below computes the transitive closure of a directed graph. Note
 the use of the `runtime!` macro.
 
 ```rust
-mod datalog {
-    use crepe::runtime;
+use crepe::runtime;
 
-    runtime! {
-        @input
-        struct Edge(i32, i32);
+runtime! {
+    @input
+    struct Edge(i32, i32);
 
-        @output
-        struct Tc(i32, i32);
+    @output
+    struct Reachable(i32, i32);
 
-        Tc(x, y) <- Edge(x, y);
-        Tc(x, z) <- Edge(x, y), Tc(y, z);
-    }
-
-    pub fn run(edges: &[(i32, i32)]) -> Vec<(i32, i32)> {
-        let output = Runtime::new()
-            .edge(edges.iter().map(|&(a, b)| Edge(a, b)))
-            .run();
-        output.tc.into_iter().map(|Tc(a, b)| (a, b)).collect()
-    }
+    Reachable(x, y) <- Edge(x, y);
+    Reachable(x, z) <- Edge(x, y), Reachable(y, z);
 }
 
 fn main() {
-    let edges = vec![(1, 2), (2, 3), (3, 4), (2, 5)];
-    let result = datalog::run(&edges);
-    println!("{:?}", result);
+    let edges = vec![Edge(1, 2), Edge(2, 3), Edge(3, 4), Edge(2, 5)];
+    let result = Runtime::new().edge(edges).run();
+    for Reachable(x, y) in result.reachable {
+        println!("node {} can reach node {}", x, y);
+    }
 }
 ```
 
