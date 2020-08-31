@@ -163,8 +163,14 @@ enum IndexMode {
 
 #[derive(Eq, PartialEq, Hash, Clone)]
 struct Index {
-    name: String,
+    name: Ident,
     mode: Vec<IndexMode>,
+}
+
+impl Index {
+    fn to_ident(&self) -> Ident {
+        Ident::new(&self.to_string(), self.name.span())
+    }
 }
 
 impl Display for Index {
@@ -177,7 +183,7 @@ impl Display for Index {
                 IndexMode::Free => 'f',
             })
             .collect();
-        write!(f, "__{}_index_{}", self.name.to_lowercase(), mode)
+        write!(f, "__{}_index_{}", to_lowercase(&self.name), mode)
     }
 }
 
@@ -276,6 +282,13 @@ impl Context {
             rels_intermediate,
             rules,
         }
+    }
+
+    fn get_relation(&self, name: &str) -> Option<&Relation> {
+        self.rels_input
+            .get(name)
+            .or(self.rels_intermediate.get(name))
+            .or(self.rels_output.get(name))
     }
 }
 
@@ -504,13 +517,10 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             });
             let index_updates = indices.iter().map(|index| {
                 let rel = context
-                    .rels_input
-                    .get(&index.name)
-                    .or(context.rels_output.get(&index.name))
-                    .or(context.rels_intermediate.get(&index.name))
+                    .get_relation(&index.name.to_string())
                     .expect("index relation should be found in context");
                 let rel_update = format_ident!("__{}_update", to_lowercase(&rel.name));
-                let index_name = Ident::new(&index.to_string(), rel.name.span());
+                let index_name = index.to_ident();
                 let index_name_update = format_ident!("{}_update", index_name);
                 let bound_pos: Vec<_> = index
                     .mode
@@ -577,13 +587,10 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
         });
         let init_indices = indices.iter().map(|index| {
             let rel = context
-                .rels_input
-                .get(&index.name)
-                .or(context.rels_output.get(&index.name))
-                .or(context.rels_intermediate.get(&index.name))
+                .get_relation(&index.name.to_string())
                 .expect("index relation should be found in context");
             let rel_name = &rel.name;
-            let index_name = Ident::new(&index.to_string(), rel.name.span());
+            let index_name = index.to_ident();
             let index_name_update = format_ident!("{}_update", index_name);
             let key_type: Vec<_> = index
                 .mode
@@ -753,7 +760,7 @@ fn make_clause(
                     })
                     .collect();
                 let index = Index {
-                    name: name.to_string(),
+                    name: name.clone(),
                     mode: index_mode,
                 };
                 let mut index_name = Ident::new(&index.to_string(), name.span());
