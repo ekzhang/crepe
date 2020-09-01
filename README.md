@@ -1,11 +1,18 @@
-**(WORK IN PROGRESS)**
-
 # Crepe
 
 Crepe is a library that allows you to write declarative logic programs in
 Rust, with a [Datalog](https://en.wikipedia.org/wiki/Datalog)-like syntax.
 It provides a procedural macro that generates efficient, safe code and
 interoperates seamlessly with Rust programs.
+
+## Features
+
+- Semi-naive evaluation
+- Stratified negation
+- Automatic generation of indices for relations
+- Easily call Rust functions from within Datalog rules
+- Typesafe way to initialize `@input` relations
+- Very fast, compiled directly with the rest of your Rust code
 
 ## Example
 
@@ -109,17 +116,20 @@ Walk: 89203
 NoWalk: 8207
 ```
 
-## Features
+## Notes
 
-- Semi-naive evaluation
-- Stratified negation
-- Automatic generation of indices for relations
-- Arbitrary Rust expression syntax allowed in rules
-- Typesafe way to initialize `@input` relations
-- Very fast, compiled directly with the rest of your Rust code
+From initial testing, the generated code is very fast. Variants of transitive
+closure for large graphs (~1000 nodes) run at comparable speed to compiled
+[Souffle](https://souffle-lang.github.io/), and at a fraction of the
+compilation time.
+
+This macro generates a `Crepe` struct in the current module, as well as structs
+for all of the declared relations. This means that to integrate Crepe inside a
+larger program, you should put it in its own module with related code. See the
+documentation for more information.
 
 ## Acknowledgements
 
-This work was heavily inspired by [Souffle](https://souffle-lang.github.io/)
+This project was heavily inspired by [Souffle](https://souffle-lang.github.io/)
 and [Formulog](https://github.com/HarvardPL/formulog), which both use similar
 models of Datalog compilation for static analysis.

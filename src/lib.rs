@@ -127,9 +127,51 @@ use strata::Strata;
 /// Note that all Boolean conditions within the clauses of rules are evaluated
 /// in-place, and they must be surrounded by parentheses.
 ///
+/// # Evaluation Mode
+/// All generated code uses semi-naive evaluation (see Chapter 3 of _Datalog
+/// and Recursive Query Processing_), and it is split into multiple strata to
+/// enable stratified negation. For example, we can extend the code above to
+/// also compute the complement of transitive closure in a graph:
+/// ```
+/// mod datalog {
+///     use crepe::crepe;
+///
+///     crepe! {
+///         @input
+///         struct Edge(i32, i32);
+///
+///         @output
+///         struct Tc(i32, i32);
+///
+///         struct Node(i32);
+///
+///         @output
+///         struct NotTc(i32, i32);
+///
+///         Tc(x, y) <- Edge(x, y);
+///         Tc(x, z) <- Edge(x, y), Tc(y, z);
+///
+///         Node(x) <- Edge(x, _);
+///         Node(x) <- Edge(_, x);
+///         NotTc(x, y) <- Node(x), Node(y), !Tc(x, y);
+///     }
+///
+///     pub fn run(edges: &[(i32, i32)]) -> (Vec<(i32, i32)>, Vec<(i32, i32)>) {
+///         let mut runtime = Crepe::new();
+///         runtime.extend(edges.iter().map(|&(a, b)| Edge(a, b)));
+///         let (tc, not_tc) = runtime.run();
+///         (
+///             tc.into_iter().map(|Tc(a, b)| (a, b)).collect(),
+///             not_tc.into_iter().map(|NotTc(a, b)| (a, b)).collect(),
+///         )
+///     }
+/// }
+/// # fn main() {}
+/// ```
+///
 /// # Hygiene
 /// In addition to the relation structs, this macro generates implementations
-/// of private `Crepe` and `CrepeOutput` structs. Therefore, it is
+/// of a private struct named `Crepe` for the runtime. Therefore, it is
 /// recommended to place each Datalog program within its own module, to prevent
 /// name collisions.
 #[proc_macro]
