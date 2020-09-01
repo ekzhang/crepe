@@ -37,6 +37,19 @@ fn main() {
 }
 ```
 
+Output:
+
+```
+node 1 can reach node 2
+node 1 can reach node 3
+node 1 can reach node 4
+node 1 can reach node 5
+node 2 can reach node 3
+node 2 can reach node 4
+node 2 can reach node 5
+node 3 can reach node 4
+```
+
 You can do much more with Crepe. The next example shows how you can use
 stratified negation, Rust expression syntax, and semi-naive evaluation to find
 all paths in a weighted graph with length at most `MAX_PATH_LEN`.
@@ -69,6 +82,31 @@ crepe! {
 
     NoWalk(x, y) <- Node(x), Node(y), !Walk(x, y, _);
 }
+
+fn main() {
+    let n = 256;
+    let mut edges = Vec::new();
+    for i in 0..n {
+        for j in 0..n {
+            if rand::random::<f32>() < 0.02 {
+                edges.push(Edge(i, j, 5));
+            }
+        }
+    }
+
+    let mut runtime = Crepe::new();
+    runtime.extend(edges);
+    let (walk, nowalk) = runtime.run();
+    println!("Walk: {}", walk.len());
+    println!("NoWalk: {}", nowalk.len());
+}
+```
+
+Output:
+
+```
+Walk: 89203
+NoWalk: 8207
 ```
 
 ## Features
