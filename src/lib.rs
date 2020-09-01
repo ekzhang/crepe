@@ -9,15 +9,17 @@
 extern crate proc_macro;
 
 mod parse;
+mod strata;
 
 use proc_macro::TokenStream;
 use proc_macro_error::{abort, proc_macro_error};
 use quote::{format_ident, quote, quote_spanned};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter};
-use syn::{parse_macro_input, Expr, Ident};
+use syn::{parse_macro_input, Expr, Ident, Type};
 
 use parse::{Clause, Fact, Program, Relation, Rule};
+use strata::Strata;
 
 /// The main macro, which lets you write a Datalog program declaratively.
 ///
@@ -146,6 +148,9 @@ pub fn crepe(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+/// Function that takes a `TokenStream` as input, and returns a `TokenStream`
+type QuoteWrapper = dyn Fn(proc_macro2::TokenStream) -> proc_macro2::TokenStream;
+
 /// Intermediate representation for Datalog compilation
 struct Context {
     rels_input: HashMap<String, Relation>,
@@ -153,38 +158,7 @@ struct Context {
     output_order: Vec<Ident>,
     rels_intermediate: HashMap<String, Relation>,
     rules: Vec<Rule>,
-}
-
-#[derive(Eq, PartialEq, Hash, Copy, Clone)]
-enum IndexMode {
-    Bound,
-    Free,
-}
-
-#[derive(Eq, PartialEq, Hash, Clone)]
-struct Index {
-    name: Ident,
-    mode: Vec<IndexMode>,
-}
-
-impl Index {
-    fn to_ident(&self) -> Ident {
-        Ident::new(&self.to_string(), self.name.span())
-    }
-}
-
-impl Display for Index {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mode: String = self
-            .mode
-            .iter()
-            .map(|mode| match mode {
-                IndexMode::Bound => 'b',
-                IndexMode::Free => 'f',
-            })
-            .collect();
-        write!(f, "__{}_index_{}", to_lowercase(&self.name), mode)
-    }
+    strata: Strata,
 }
 
 impl Context {
@@ -198,7 +172,7 @@ impl Context {
 
         program.relations.into_iter().for_each(|relation| {
             let name = relation.name.to_string();
-            if !rel_names.insert(name.clone()) {
+            if !rel_names.insert(relation.name.clone()) {
                 abort!(relation.name.span(), "Duplicate relation name: {}", name);
             }
 
@@ -222,11 +196,14 @@ impl Context {
             }
         });
 
-        // Read in rules, ensure that there are no undefined relations, or
+        // Read in rules, ensuring that there are no undefined relations, or
         // relations declared with incorrect arity.
+        //
+        // Also generate dependency edges between relations for stratification.
+        let mut dependencies = HashSet::new();
         let check = |fact: &Fact| {
             let name = fact.relation.to_string();
-            if !rel_names.contains(&name) {
+            if !rel_names.contains(&fact.relation) {
                 abort!(
                     fact.relation.span(),
                     "Relation name '{}' was not found. Did you misspell it?",
@@ -265,9 +242,35 @@ impl Context {
             rule.clauses.iter().for_each(|clause| {
                 if let Clause::Fact(fact) = clause {
                     check(&fact);
+                    dependencies.insert((&rule.goal.relation, &fact.relation));
                 }
             });
         });
+
+        // Now we can stratify the relations
+        let strata = Strata::new(rel_names, dependencies);
+
+        // Check for dependency cycles in datalog negations
+        for rule in &program.rules {
+            let goal_stratum = strata.find_relation(&rule.goal.relation);
+            for clause in &rule.clauses {
+                if let Clause::Fact(fact) = clause {
+                    if fact.negate.is_some() {
+                        let fact_stratum = strata.find_relation(&fact.relation);
+                        if goal_stratum == fact_stratum {
+                            abort!(
+                                fact.relation.span(),
+                                "Negation of relation '{}' creates a dependency cycle \
+                                and cannot be stratified.",
+                                fact.relation
+                            );
+                        }
+                        // This should be guaranteed by reverse topological order
+                        assert!(goal_stratum > fact_stratum);
+                    }
+                }
+            }
+        }
 
         // If all the relations are OK, we simply update the rules as-is.
         //
@@ -281,6 +284,7 @@ impl Context {
             output_order,
             rels_intermediate,
             rules,
+            strata,
         }
     }
 
@@ -290,14 +294,75 @@ impl Context {
             .or(self.rels_intermediate.get(name))
             .or(self.rels_output.get(name))
     }
+
+    fn all_relations(&self) -> impl Iterator<Item = &Relation> {
+        self.rels_input
+            .values()
+            .chain(self.rels_intermediate.values())
+            .chain(self.rels_output.values())
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Copy, Clone)]
+enum IndexMode {
+    Bound,
+    Free,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone)]
+struct Index {
+    name: Ident,
+    mode: Vec<IndexMode>,
+}
+
+impl Index {
+    fn to_ident(&self) -> Ident {
+        Ident::new(&self.to_string(), self.name.span())
+    }
+
+    fn key_type<'a>(&self, context: &'a Context) -> Vec<&'a Type> {
+        let rel = context
+            .get_relation(&self.name.to_string())
+            .expect("could not find relation of index name");
+        self.mode
+            .iter()
+            .zip(rel.fields.iter())
+            .filter_map(|(mode, ty)| match mode {
+                IndexMode::Bound => Some(ty),
+                IndexMode::Free => None,
+            })
+            .collect()
+    }
+
+    fn bound_pos(&self) -> Vec<syn::Index> {
+        self.mode
+            .iter()
+            .enumerate()
+            .filter_map(|(i, mode)| match mode {
+                IndexMode::Bound => Some(syn::Index::from(i)),
+                IndexMode::Free => None,
+            })
+            .collect()
+    }
+}
+
+impl Display for Index {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mode: String = self
+            .mode
+            .iter()
+            .map(|mode| match mode {
+                IndexMode::Bound => 'b',
+                IndexMode::Free => 'f',
+            })
+            .collect();
+        write!(f, "__{}_index{}", to_lowercase(&self.name), mode)
+    }
 }
 
 fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
     context
-        .rels_input
-        .values()
-        .chain(context.rels_intermediate.values())
-        .chain(context.rels_output.values())
+        .all_relations()
         .map(|relation| {
             let struct_token = &relation.struct_token;
             let name = &relation.name;
@@ -466,114 +531,22 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 /// Please note that this example uses naive evaluation for simplicity, but we
 /// actually generate code for semi-naive evaluation.
 fn make_run(context: &Context) -> proc_macro2::TokenStream {
-    let all_rels = context
-        .rels_input
-        .values()
-        .chain(context.rels_intermediate.values())
-        .chain(context.rels_output.values());
-
     let mut indices: HashSet<Index> = HashSet::new();
 
-    let main_loop = {
-        let empty_cond: proc_macro2::TokenStream = all_rels
-            .clone()
-            .map(|rel| {
-                let lower = to_lowercase(&rel.name);
-                let rel_update = format_ident!("__{}_update", lower);
-                quote! {
-                    #rel_update.is_empty() &&
-                }
-            })
-            .chain(std::iter::once(quote! {true}))
-            .collect();
-
-        let new_decls: proc_macro2::TokenStream = all_rels
-            .clone()
-            .map(|rel| {
-                let name = &rel.name;
-                let lower = to_lowercase(name);
-                let rel_new = format_ident!("__{}_new", lower);
-                quote! {
-                    let mut #rel_new: ::std::collections::HashSet<#name> =
-                        ::std::collections::HashSet::new();
-                }
-            })
-            .collect();
-
-        let rules: proc_macro2::TokenStream = context
-            .rules
-            .iter()
-            .map(|rule| make_rule(rule, &mut indices))
-            .collect();
-
-        let updates: proc_macro2::TokenStream = {
-            let rel_updates = all_rels.clone().map(|rel| {
-                let lower = to_lowercase(&rel.name);
-                let rel = format_ident!("__{}", lower);
-                let rel_update = format_ident!("__{}_update", lower);
-                quote! {
-                    #rel.extend(&#rel_update);
-                }
-            });
-            let index_updates = indices.iter().map(|index| {
-                let rel = context
-                    .get_relation(&index.name.to_string())
-                    .expect("index relation should be found in context");
-                let rel_update = format_ident!("__{}_update", to_lowercase(&rel.name));
-                let index_name = index.to_ident();
-                let index_name_update = format_ident!("{}_update", index_name);
-                let bound_pos: Vec<_> = index
-                    .mode
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, mode)| match mode {
-                        IndexMode::Bound => Some(syn::Index::from(i)),
-                        IndexMode::Free => None,
-                    })
-                    .collect();
-                quote! {
-                    #index_name_update.clear();
-                    for &__crepe_var in #rel_update.iter() {
-                        #index_name
-                            .entry((#(__crepe_var.#bound_pos,)*))
-                            .or_default()
-                            .push(__crepe_var);
-                        #index_name_update
-                            .entry((#(__crepe_var.#bound_pos,)*))
-                            .or_default()
-                            .push(__crepe_var);
-                    }
-                }
-            });
-            rel_updates.chain(index_updates).collect()
-        };
-
-        let set_update_to_new: proc_macro2::TokenStream = all_rels
-            .clone()
-            .map(|rel| {
-                let lower = to_lowercase(&rel.name);
-                let rel_update = format_ident!("__{}_update", lower);
-                let rel_new = format_ident!("__{}_new", lower);
-                quote! {
-                    #rel_update = #rel_new;
-                }
-            })
-            .collect();
-
-        quote! {
-            let mut __crepe_first_iteration = true;
-            while __crepe_first_iteration || !(#empty_cond) {
-                #updates
-                #new_decls
-                #rules
-                #set_update_to_new
-                __crepe_first_iteration = false;
-            }
+    let main_loops = {
+        let mut loop_wrappers = Vec::new();
+        for stratum in context.strata.iter() {
+            loop_wrappers.push(make_stratum(context, stratum, &mut indices));
         }
+        loop_wrappers
+            .iter()
+            .zip(context.strata.iter())
+            .map(|(f, stratum)| f(make_updates(context, stratum, &indices)))
+            .collect::<proc_macro2::TokenStream>()
     };
 
     let initialize = {
-        let init_rels = all_rels.clone().map(|rel| {
+        let init_rels = context.all_relations().map(|rel| {
             let name = &rel.name;
             let lower = to_lowercase(name);
             let var = format_ident!("__{}", lower);
@@ -591,21 +564,9 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
                 .expect("index relation should be found in context");
             let rel_name = &rel.name;
             let index_name = index.to_ident();
-            let index_name_update = format_ident!("{}_update", index_name);
-            let key_type: Vec<_> = index
-                .mode
-                .iter()
-                .zip(rel.fields.iter())
-                .filter_map(|(mode, ty)| match mode {
-                    IndexMode::Bound => Some(ty),
-                    IndexMode::Free => None,
-                })
-                .collect();
+            let key_type = index.key_type(context);
             quote! {
                 let mut #index_name:
-                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
-                    ::std::collections::HashMap::new();
-                let mut #index_name_update:
                     ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
                     ::std::collections::HashMap::new();
             }
@@ -637,13 +598,136 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     quote! {
         fn run(self) -> #output_ty {
             #initialize
-            #main_loop
+            #main_loops
             #output
         }
     }
 }
 
-fn make_rule(rule: &Rule, indices: &mut HashSet<Index>) -> proc_macro2::TokenStream {
+fn make_stratum(
+    context: &Context,
+    stratum: &[Ident],
+    indices: &mut HashSet<Index>,
+) -> Box<QuoteWrapper> {
+    let stratum: HashSet<_> = stratum.into_iter().collect();
+    let current_rels: Vec<_> = stratum
+        .iter()
+        .map(|name| {
+            context
+                .get_relation(&name.to_string())
+                .expect("cannot find relation from stratum")
+        })
+        .collect();
+
+    let empty_cond: proc_macro2::TokenStream = current_rels
+        .iter()
+        .map(|rel| {
+            let lower = to_lowercase(&rel.name);
+            let rel_update = format_ident!("__{}_update", lower);
+            quote! {
+                #rel_update.is_empty() &&
+            }
+        })
+        .chain(std::iter::once(quote! {true}))
+        .collect();
+
+    let new_decls: proc_macro2::TokenStream = current_rels
+        .iter()
+        .map(|rel| {
+            let name = &rel.name;
+            let lower = to_lowercase(name);
+            let rel_new = format_ident!("__{}_new", lower);
+            quote! {
+                let mut #rel_new: ::std::collections::HashSet<#name> =
+                    ::std::collections::HashSet::new();
+            }
+        })
+        .collect();
+
+    let rules: proc_macro2::TokenStream = context
+        .rules
+        .iter()
+        .filter(|rule| stratum.contains(&rule.goal.relation))
+        .map(|rule| make_rule(rule, &stratum, indices))
+        .collect();
+
+    let set_update_to_new: proc_macro2::TokenStream = current_rels
+        .iter()
+        .map(|rel| {
+            let lower = to_lowercase(&rel.name);
+            let rel_update = format_ident!("__{}_update", lower);
+            let rel_new = format_ident!("__{}_new", lower);
+            quote! {
+                #rel_update = #rel_new;
+            }
+        })
+        .collect();
+
+    // We can only compute the updates later, when all indices are known
+    Box::new(move |updates| {
+        quote! {
+            let mut __crepe_first_iteration = true;
+            while __crepe_first_iteration || !(#empty_cond) {
+                #updates
+                #new_decls
+                #rules
+                #set_update_to_new
+                __crepe_first_iteration = false;
+            }
+        }
+    })
+}
+
+fn make_updates(
+    context: &Context,
+    stratum: &[Ident],
+    indices: &HashSet<Index>,
+) -> proc_macro2::TokenStream {
+    let rel_updates = stratum.iter().map(|name| {
+        let lower = to_lowercase(name);
+        let rel = format_ident!("__{}", lower);
+        let rel_update = format_ident!("__{}_update", lower);
+        quote! {
+            #rel.extend(&#rel_update);
+        }
+    });
+    let index_updates = indices.iter().filter_map(|index| {
+        if !stratum.contains(&index.name) {
+            return None;
+        }
+        let rel = context
+            .get_relation(&index.name.to_string())
+            .expect("index relation should be found in context");
+        let rel_name = &rel.name;
+        let rel_update = format_ident!("__{}_update", to_lowercase(rel_name));
+        let index_name = index.to_ident();
+        let index_name_update = format_ident!("{}_update", index_name);
+        let key_type = index.key_type(context);
+        let bound_pos = index.bound_pos();
+        Some(quote! {
+            let mut #index_name_update:
+                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
+                ::std::collections::HashMap::new();
+            for &__crepe_var in #rel_update.iter() {
+                #index_name
+                    .entry((#(__crepe_var.#bound_pos,)*))
+                    .or_default()
+                    .push(__crepe_var);
+                #index_name_update
+                    .entry((#(__crepe_var.#bound_pos,)*))
+                    .or_default()
+                    .push(__crepe_var);
+            }
+        })
+    });
+    rel_updates.chain(index_updates).collect()
+}
+
+fn make_rule(
+    rule: &Rule,
+    stratum: &HashSet<&Ident>,
+    indices: &mut HashSet<Index>,
+) -> proc_macro2::TokenStream {
     let goal = {
         let relation = &rule.goal.relation;
         let fields = &rule.goal.fields;
@@ -661,12 +745,18 @@ fn make_rule(rule: &Rule, indices: &mut HashSet<Index>) -> proc_macro2::TokenStr
         .iter()
         .enumerate()
         .filter_map(|(i, clause)| match clause {
-            Clause::Fact(_) => Some(i),
+            Clause::Fact(fact) => {
+                if stratum.contains(&fact.relation) {
+                    Some(i)
+                } else {
+                    None
+                }
+            }
             Clause::Expr(_) => None,
         })
         .collect();
     if fact_positions.is_empty() {
-        // Purely an expression, so we only need to evaluate it once
+        // Will not change, so we only need to evaluate it once
         let mut datalog_vars: HashSet<String> = HashSet::new();
         let fragments: Vec<_> = rule
             .clauses
@@ -701,8 +791,6 @@ fn make_rule(rule: &Rule, indices: &mut HashSet<Index>) -> proc_macro2::TokenStr
     }
 }
 
-type QuoteWrapper = dyn Fn(proc_macro2::TokenStream) -> proc_macro2::TokenStream;
-
 fn make_clause(
     clause: Clause,
     only_update: bool,
@@ -712,6 +800,29 @@ fn make_clause(
     match clause {
         Clause::Fact(fact) => {
             let name = &fact.relation;
+            if fact.negate.is_some() {
+                // Special case: stratified negation, needs to be handled separately
+                assert!(!only_update);
+                let to_mode = |f: &Option<_>| {
+                    f.as_ref()
+                        .map(|_| IndexMode::Bound)
+                        .unwrap_or(IndexMode::Free)
+                };
+                let index = Index {
+                    name: name.clone(),
+                    mode: fact.fields.iter().map(to_mode).collect(),
+                };
+                let index_name = index.to_ident();
+                indices.insert(index);
+                let bound_fields: Vec<_> = fact.fields.iter().flatten().cloned().collect();
+                return Box::new(move |body| {
+                    quote_spanned! {fact.relation.span()=>
+                        if !#index_name.contains_key(&(#(#bound_fields,)*)) {
+                            #body
+                        }
+                    }
+                });
+            }
             let mut setters = Vec::new();
             let mut index_mode = Vec::new();
             for (i, field) in fact.fields.iter().enumerate() {

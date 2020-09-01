@@ -1,0 +1,5 @@
+error: Negation of relation 'Ok' creates a dependency cycle and cannot be stratified.
+ --> $DIR/recursive_negation.rs:8:14
+  |
+8 |     Ok() <- !Ok();
+  |              ^^

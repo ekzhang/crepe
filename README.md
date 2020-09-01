@@ -37,17 +37,48 @@ fn main() {
 }
 ```
 
+You can do much more with Crepe. The next example shows how you can use
+stratified negation, Rust expression syntax, and semi-naive evaluation to find
+all paths in a weighted graph with length at most `MAX_PATH_LEN`.
+
+```rust
+use crepe::crepe;
+
+const MAX_PATH_LEN: u32 = 20;
+
+crepe! {
+    @input
+    struct Edge(i32, i32, u32);
+
+    @output
+    struct Walk(i32, i32, u32);
+
+    @output
+    struct NoWalk(i32, i32);
+
+    struct Node(i32);
+
+    Node(x) <- Edge(x, _, _);
+    Node(x) <- Edge(_, x, _);
+
+    Walk(x, x, 0) <- Node(x);
+    Walk(x, z, len1 + len2) <-
+        Edge(x, y, len1),
+        Walk(y, z, len2),
+        (len1 + len2 <= MAX_PATH_LEN);
+
+    NoWalk(x, y) <- Node(x), Node(y), !Walk(x, y, _);
+}
+```
+
 ## Features
 
 - Semi-naive evaluation
+- Stratified negation
 - Automatic generation of indices for relations
 - Arbitrary Rust expression syntax allowed in rules
-- Builder pattern for setting `@input` relations
+- Typesafe way to initialize `@input` relations
 - Very fast, compiled directly with the rest of your Rust code
-
-In the future, we want to support:
-
-- Stratified negation
 
 ## Acknowledgements
 

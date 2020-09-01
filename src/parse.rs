@@ -90,7 +90,7 @@ impl Parse for Clause {
         let lookahead = input.lookahead1();
         if lookahead.peek(token::Paren) {
             input.parse().map(Clause::Expr)
-        } else if lookahead.peek(Ident) {
+        } else if lookahead.peek(Ident) || lookahead.peek(Token![!]) {
             input.parse().map(Clause::Fact)
         } else {
             Err(lookahead.error())
@@ -100,6 +100,7 @@ impl Parse for Clause {
 
 #[derive(Clone)]
 pub struct Fact {
+    pub negate: Option<Token![!]>,
     pub relation: Ident,
     pub paren_token: token::Paren,
     pub fields: Punctuated<Option<Expr>, Token![,]>,
@@ -109,6 +110,7 @@ impl Parse for Fact {
     fn parse(input: ParseStream) -> Result<Self> {
         let content;
         Ok(Self {
+            negate: input.parse()?,
             relation: input.parse()?,
             paren_token: parenthesized!(content in input),
             fields: content.parse_terminated(|input| {
