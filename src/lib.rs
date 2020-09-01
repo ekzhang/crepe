@@ -6,6 +6,9 @@
 //! # Documentation
 //! See the [`crepe!`](macro.Crepe.html) macro for detailed documentation.
 
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
 extern crate proc_macro;
 
 mod parse;
