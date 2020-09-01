@@ -4,7 +4,7 @@
 //! interoperates seamlessly with Rust programs.
 //!
 //! # Documentation
-//! See the [`crepe!`](macro.Crepe.html) macro for detailed documentation.
+//! See the [`crepe!`](macro.crepe.html) macro for detailed documentation.
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]

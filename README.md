@@ -1,4 +1,7 @@
-# Crepe
+# Crepe &emsp; [![Latest Version]][crates.io]
+
+[latest version]: https://img.shields.io/crates/v/crepe.svg
+[crates.io]: https://crates.io/crates/crepe
 
 Crepe is a library that allows you to write declarative logic programs in
 Rust, with a [Datalog](https://en.wikipedia.org/wiki/Datalog)-like syntax.
