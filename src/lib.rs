@@ -414,7 +414,13 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
             quote! {
-                #[derive(Copy, Clone, Eq, PartialEq, Hash)]
+                #[derive(
+                    ::core::marker::Copy,
+                    ::core::clone::Clone,
+                    ::core::cmp::Eq,
+                    ::core::cmp::PartialEq,
+                    ::core::hash::Hash,
+                )]
                 #struct_token #name(#fields)#semi_token
             }
         })
