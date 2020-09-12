@@ -413,7 +413,7 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
             let name = &relation.name;
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
-            quote! {
+            quote_spanned! {name.span()=>
                 #[derive(
                     ::core::marker::Copy,
                     ::core::clone::Clone,
