@@ -1,0 +1,25 @@
+error[E0277]: the trait bound `f64: std::hash::Hash` is not satisfied
+   --> $DIR/not_eq_relation.rs:8:15
+    |
+8   |     struct Ok(f64);
+    |               ^^^ the trait `std::hash::Hash` is not implemented for `f64`
+    |
+   ::: $RUST/src/libcore/hash/mod.rs
+    |
+    |     fn hash<H: Hasher>(&self, state: &mut H);
+    |             - required by this bound in `std::hash::Hash::hash`
+    |
+    = note: this error originates in a derive macro (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `f64: std::cmp::Eq` is not satisfied
+   --> $DIR/not_eq_relation.rs:8:15
+    |
+8   |     struct Ok(f64);
+    |               ^^^ the trait `std::cmp::Eq` is not implemented for `f64`
+    |
+   ::: $RUST/src/libcore/cmp.rs
+    |
+    | pub struct AssertParamIsEq<T: Eq + ?Sized> {
+    |                               -- required by this bound in `std::cmp::AssertParamIsEq`
+    |
+    = note: this error originates in a derive macro (in Nightly builds, run with -Z macro-backtrace for more info)
