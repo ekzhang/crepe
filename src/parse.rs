@@ -49,6 +49,7 @@ impl Parse for Relation {
             None
         };
         let content;
+        #[allow(clippy::eval_order_dependence)]
         Ok(Self {
             attribute,
             struct_token: input.parse()?,
@@ -109,6 +110,7 @@ pub struct Fact {
 impl Parse for Fact {
     fn parse(input: ParseStream) -> Result<Self> {
         let content;
+        #[allow(clippy::eval_order_dependence)]
         Ok(Self {
             negate: input.parse()?,
             relation: input.parse()?,

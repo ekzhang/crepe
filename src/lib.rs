@@ -257,8 +257,8 @@ impl Context {
             }
             let rel = rels_input
                 .get(&name)
-                .or(rels_output.get(&name))
-                .or(rels_intermediate.get(&name))
+                .or_else(|| rels_output.get(&name))
+                .or_else(|| rels_intermediate.get(&name))
                 .expect("relation should exist");
             if rel.fields.len() != fact.fields.len() {
                 abort!(
@@ -336,8 +336,8 @@ impl Context {
     fn get_relation(&self, name: &str) -> Option<&Relation> {
         self.rels_input
             .get(name)
-            .or(self.rels_intermediate.get(name))
-            .or(self.rels_output.get(name))
+            .or_else(|| self.rels_intermediate.get(name))
+            .or_else(|| self.rels_output.get(name))
     }
 
     fn all_relations(&self) -> impl Iterator<Item = &Relation> {
@@ -660,7 +660,7 @@ fn make_stratum(
     stratum: &[Ident],
     indices: &mut HashSet<Index>,
 ) -> Box<QuoteWrapper> {
-    let stratum: HashSet<_> = stratum.into_iter().collect();
+    let stratum: HashSet<_> = stratum.iter().collect();
     let current_rels: Vec<_> = stratum
         .iter()
         .map(|name| {
@@ -905,7 +905,7 @@ fn make_clause(
                 // If no fields are bound, we don't need an index
                 Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
-                        for __crepe_var in #rel.iter() {
+                        for &__crepe_var in #rel.iter() {
                             #setters
                             #body
                         }
