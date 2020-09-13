@@ -41,3 +41,42 @@ fn test_transitive_closure() {
     result.sort();
     assert_eq!(result, expected);
 }
+
+// Version of the above test with &'static str
+
+mod datalog_str {
+    use crepe::crepe;
+
+    crepe! {
+        @input
+        struct Edge(&'static str, &'static str);
+
+        @output
+        struct Tc(&'static str, &'static str);
+
+        Tc(x, y) <- Edge(x, y);
+        Tc(x, z) <- Edge(x, y), Tc(y, z);
+    }
+
+    pub fn run(edges: &[(&'static str, &'static str)]) -> Vec<(&'static str, &'static str)> {
+        let mut runtime = Crepe::new();
+        runtime.extend(edges.iter().map(|&(a, b)| Edge(a, b)));
+        let (tc,) = runtime.run();
+        tc.into_iter().map(|Tc(a, b)| (a, b)).collect()
+    }
+}
+
+#[test]
+fn test_transitive_closure_str() {
+    let edges = [("hello", "world"), ("world", "foo"), ("world", "bar")];
+    let expected = [
+        ("hello", "bar"),
+        ("hello", "foo"),
+        ("hello", "world"),
+        ("world", "bar"),
+        ("world", "foo"),
+    ];
+    let mut result = datalog_str::run(&edges);
+    result.sort();
+    assert_eq!(result, expected);
+}
