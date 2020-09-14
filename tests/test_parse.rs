@@ -19,6 +19,8 @@ mod datalog {
         Tc(x, y) <- Edge(x, y);
         Tc(x, z) <- Edge(x, y), Tc(y, z), (z > 5);
 
+        Tc(x, y) <- let (x, y) = (3, 4);
+
         Intermediate(_x, crepe, z) <- (true), (false), Intermediate(_x, crepe, z);
         Intermediate(42, y, 'c') <- (true), (false), Intermediate(_x, y, _z);
 

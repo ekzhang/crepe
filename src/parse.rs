@@ -2,7 +2,7 @@
 
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{parenthesized, token, Expr, Ident, Result, Token, Type};
+use syn::{parenthesized, token, Expr, ExprLet, Ident, Result, Token, Type};
 
 #[derive(Clone)]
 pub struct Program {
@@ -84,6 +84,7 @@ impl Parse for Rule {
 pub enum Clause {
     Fact(Fact),
     Expr(Expr),
+    Let(ExprLet),
 }
 
 impl Parse for Clause {
@@ -91,6 +92,8 @@ impl Parse for Clause {
         let lookahead = input.lookahead1();
         if lookahead.peek(token::Paren) {
             input.parse().map(Clause::Expr)
+        } else if lookahead.peek(Token![let]) {
+            input.parse().map(Clause::Let)
         } else if lookahead.peek(Ident) || lookahead.peek(Token![!]) {
             input.parse().map(Clause::Fact)
         } else {

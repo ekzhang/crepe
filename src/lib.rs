@@ -127,6 +127,10 @@ use strata::Strata;
 /// Note that all Boolean conditions within the clauses of rules are evaluated
 /// in-place, and they must be surrounded by parentheses.
 ///
+/// We also support let-bindings in rules, including bindings that destructure
+/// their arguments conditionally. See `tests/test_destructure.rs` for an
+/// example of this.
+///
 /// # Evaluation Mode
 /// All generated code uses semi-naive evaluation (see Chapter 3 of _Datalog
 /// and Recursive Query Processing_), and it is split into multiple strata to
@@ -803,7 +807,7 @@ fn make_rule(
                     None
                 }
             }
-            Clause::Expr(_) => None,
+            _ => None,
         })
         .collect();
     if fact_positions.is_empty() {
@@ -948,6 +952,15 @@ fn make_clause(
                 quote! {
                     #[allow(unused_parens)]
                     if #expr { #body }
+                }
+            })
+        }
+        Clause::Let(guard) => {
+            assert!(!only_update);
+            Box::new(move |body| {
+                quote! {
+                    #[allow(irrefutable_let_patterns)]
+                    if #guard { #body }
                 }
             })
         }
