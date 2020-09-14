@@ -52,14 +52,31 @@ use strata::Strata;
 /// }
 /// # fn main() {}
 /// ```
+///
+/// # Generated Code
 /// Each `struct` in the program is turned into a Datalog relation, while each
-/// line of the form `goal <- clause1, clause2, ...;` defines a rule that can
-/// used in a logic programming setting to define new relations.
+/// line of the form `goal <- clause1, clause2, ...;` defines a logic
+/// programming rule that is used to derive new relations.
+///
+/// In addition to the relation structs, the macro also defines a `Crepe`
+/// struct representing the runtime. This is the primary way that you interact
+/// with Crepe. It provides a couple methods and traits (here `Rel` is a
+/// placeholder for the name of your relation):
+///
+/// - `Crepe::new()`: construct a new runtime
+/// - Implements `std::iter::Extend<Rel>` for each @input struct.
+///   - `Crepe::extend(&mut self, iter: impl IntoIterator<Item = Rel>)`
+/// - Implements `std::iter::Extend<&'a Rel>` for each @input struct.
+///   - `Crepe::extend(&mut self, iter: impl IntoIterator<Item = &'a Rel>)`
+/// - `Crepe::run(self)`: evaluates the Datalog program on the given inputs,
+///   consuming the runtime object, and returns a tuple of `HashSet<Rel>`s
+///   containing the final derived @output structs.
 ///
 /// In order for the engine to work, all relations must be tuple structs, and
 /// they automatically derive the `Eq`, `PartialEq`, `Hash`, `Copy`, and
 /// `Clone` traits. This is necessary in order to create efficient indices that
-/// are used in Datalog evaluation.
+/// are used in Datalog evaluation. If you want to use Crepe with types that
+/// do not implement `Copy`, consider passing references instead.
 ///
 /// # Datalog Syntax Extensions
 /// This library supports arbitrary Rust expression syntax within rules for
