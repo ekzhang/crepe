@@ -2,7 +2,7 @@
 
 use crepe::crepe;
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
 enum Token {
     String(&'static str),
     Integer(i32),
