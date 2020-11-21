@@ -11,8 +11,8 @@ mod datalog {
         @output
         struct Fib(u32, u32);
 
-        Fib(0, 0) <- (true);
-        Fib(1, 1) <- (true);
+        Fib(0, 0);
+        Fib(1, 1);
 
         Fib(n + 2, x + y) <- Fib(n, x), Fib(n + 1, y), (n <= 23);
     }

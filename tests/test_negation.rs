@@ -4,7 +4,7 @@ use crepe::crepe;
 
 crepe! {
     struct R1(u32, u32);
-    R1(2, 3) <- (true);
+    R1(2, 3);
 
     struct Ok1();
     Ok1() <- R1(2, 3), !R1(2, 2);

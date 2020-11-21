@@ -1,5 +1,5 @@
 error: Relations marked as @input cannot be derived from a rule.
   --> $DIR/bad_goal_input.rs:11:9
    |
-11 |         In(0, 0) <- (true);
+11 |         In(0, 0);
    |         ^^

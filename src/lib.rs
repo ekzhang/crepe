@@ -55,8 +55,8 @@ use strata::Strata;
 ///
 /// # Generated Code
 /// Each `struct` in the program is turned into a Datalog relation, while each
-/// line of the form `goal <- clause1, clause2, ...;` defines a logic
-/// programming rule that is used to derive new relations.
+/// line of the form `goal <- clause1, clause2, ...;` or `fact;` defines a
+/// logic programming rule that is used to derive new relations.
 ///
 /// In addition to the relation structs, the macro also defines a `Crepe`
 /// struct representing the runtime. This is the primary way that you interact
@@ -94,7 +94,7 @@ use strata::Strata;
 ///     struct Fib(u32, u32);
 ///
 ///     Fib(0, 0) <- (true);
-///     Fib(1, 1) <- (true);
+///     Fib(1, 1); // shorthand for `Fib(1, 1) <- (true);`
 ///
 ///     Fib(n + 2, x + y) <- Fib(n, x), Fib(n + 1, y), (n + 2 <= 25);
 /// }

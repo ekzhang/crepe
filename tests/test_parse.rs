@@ -23,6 +23,7 @@ mod datalog {
 
         Intermediate(_x, crepe, z) <- (true), (false), Intermediate(_x, crepe, z);
         Intermediate(42, y, 'c') <- (true), (false), Intermediate(_x, y, _z);
+        Intermediate(21, 85, 'q');
 
         @output
         struct Node(i32);
