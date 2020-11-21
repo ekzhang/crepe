@@ -71,12 +71,31 @@ pub struct Rule {
 
 impl Parse for Rule {
     fn parse(input: ParseStream) -> Result<Self> {
-        Ok(Self {
-            goal: input.parse()?,
-            arrow_token: input.parse()?,
-            clauses: Punctuated::parse_separated_nonempty(input)?,
-            semi_token: input.parse()?,
-        })
+        let goal = input.parse()?;
+        let lookahead = input.lookahead1();
+
+        // A fact followed by a semicolon is the same as a rule with a single
+        // clause of `(true)`
+        if lookahead.peek(Token![;]) {
+            let semi_token = input.parse()?;
+
+            let arrow_token = syn::parse_quote!(<-);
+            let clauses = syn::parse_quote!((true));
+
+            Ok(Self {
+                goal,
+                arrow_token,
+                clauses,
+                semi_token,
+            })
+        } else {
+            Ok(Self {
+                goal,
+                arrow_token: input.parse()?,
+                clauses: Punctuated::parse_separated_nonempty(input)?,
+                semi_token: input.parse()?,
+            })
+        }
     }
 }
 
