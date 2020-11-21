@@ -8,7 +8,8 @@ mod datalog {
 
     crepe! {
         @input
-        struct Edge(i32, i32);
+        #[derive(Debug)]
+        pub(crate) struct Edge(pub i32, pub i32);
 
         @output
         struct Tc(i32, i32);

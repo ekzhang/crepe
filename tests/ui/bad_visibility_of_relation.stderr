@@ -1,0 +1,29 @@
+error[E0603]: tuple struct constructor `Test` is private
+  --> $DIR/bad_visibility_of_relation.rs:21:22
+   |
+9  |         struct Test(u32);
+   |                     --- a constructor is private if any of the fields is private
+...
+21 |     let _ = datalog::Test(1);
+   |                      ^^^^ private tuple struct constructor
+   |
+note: the tuple struct constructor `Test` is defined here
+  --> $DIR/bad_visibility_of_relation.rs:9:9
+   |
+9  |         struct Test(u32);
+   |         ^^^^^^^^^^^^^^^^^
+
+error[E0603]: tuple struct constructor `MoreTest` is private
+  --> $DIR/bad_visibility_of_relation.rs:22:22
+   |
+12 |         pub struct MoreTest(bool);
+   |                             ---- a constructor is private if any of the fields is private
+...
+22 |     let _ = datalog::MoreTest(false);
+   |                      ^^^^^^^^ private tuple struct constructor
+   |
+note: the tuple struct constructor `MoreTest` is defined here
+  --> $DIR/bad_visibility_of_relation.rs:12:9
+   |
+12 |         pub struct MoreTest(bool);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^

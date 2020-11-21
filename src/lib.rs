@@ -393,8 +393,8 @@ impl Index {
         self.mode
             .iter()
             .zip(rel.fields.iter())
-            .filter_map(|(mode, ty)| match mode {
-                IndexMode::Bound => Some(ty),
+            .filter_map(|(mode, field)| match mode {
+                IndexMode::Bound => Some(&field.ty),
                 IndexMode::Free => None,
             })
             .collect()
@@ -430,7 +430,9 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
     context
         .all_relations()
         .map(|relation| {
+            let attrs = &relation.attrs;
             let struct_token = &relation.struct_token;
+            let vis = &relation.visibility;
             let name = &relation.name;
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
@@ -442,7 +444,8 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
                     ::core::cmp::PartialEq,
                     ::core::hash::Hash,
                 )]
-                #struct_token #name(#fields)#semi_token
+                #(#attrs)*
+                #vis #struct_token #name(#fields)#semi_token
             }
         })
         .collect()
