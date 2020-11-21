@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3 - 2020-11-21
+
+- Add shorter syntax for defining fact-rules (#6)
+- Add visibility modifiers to structs and fields, support struct attributes (#7)
+
 ## 0.1.2 - 2020-09-13
 
 - Implement support for destructuring and `let` bindings in rules
