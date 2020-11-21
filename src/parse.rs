@@ -1,8 +1,11 @@
 //! Parsing logic
 
-use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{parenthesized, token, Expr, ExprLet, Ident, Result, Token, Type};
+use syn::{parenthesized, token, Attribute, Expr, ExprLet, Ident, Result, Token, Visibility};
+use syn::{
+    parse::{Parse, ParseStream},
+    Field,
+};
 
 #[derive(Clone)]
 pub struct Program {
@@ -33,10 +36,12 @@ impl Parse for Program {
 #[derive(Clone)]
 pub struct Relation {
     pub attribute: Option<Ident>,
+    pub attrs: Vec<Attribute>,
+    pub visibility: Visibility,
     pub struct_token: Token![struct],
     pub name: Ident,
     pub paren_token: token::Paren,
-    pub fields: Punctuated<Type, Token![,]>,
+    pub fields: Punctuated<Field, Token![,]>,
     pub semi_token: Token![;],
 }
 
@@ -52,10 +57,12 @@ impl Parse for Relation {
         #[allow(clippy::eval_order_dependence)]
         Ok(Self {
             attribute,
+            attrs: input.call(Attribute::parse_outer)?,
+            visibility: input.parse()?,
             struct_token: input.parse()?,
             name: input.parse()?,
             paren_token: parenthesized!(content in input),
-            fields: content.parse_terminated(Type::parse)?,
+            fields: content.parse_terminated(Field::parse_unnamed)?,
             semi_token: input.parse()?,
         })
     }
