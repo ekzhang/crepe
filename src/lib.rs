@@ -15,11 +15,11 @@ mod parse;
 mod strata;
 
 use proc_macro::TokenStream;
-use proc_macro_error::{abort, proc_macro_error};
+use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote, quote_spanned};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter};
-use syn::{parse_macro_input, Expr, Ident, Type};
+use syn::{parse_macro_input, spanned::Spanned, Expr, Ident, Lifetime, Type};
 
 use parse::{Clause, Fact, Program, Relation, Rule};
 use strata::Strata;
@@ -217,11 +217,14 @@ pub fn crepe(input: TokenStream) -> TokenStream {
 /// Function that takes a `TokenStream` as input, and returns a `TokenStream`
 type QuoteWrapper = dyn Fn(proc_macro2::TokenStream) -> proc_macro2::TokenStream;
 
+type NumLifetimes = usize;
+
 /// Intermediate representation for Datalog compilation
 struct Context {
+    has_lifetime: bool,
     rels_input: HashMap<String, Relation>,
     rels_output: HashMap<String, Relation>,
-    output_order: Vec<Ident>,
+    output_order: Vec<(Ident, NumLifetimes)>,
     rels_intermediate: HashMap<String, Relation>,
     rules: Vec<Rule>,
     strata: Strata,
@@ -236,20 +239,37 @@ impl Context {
         let mut rel_names = HashSet::new();
         let mut output_order = Vec::new();
 
+        let mut has_input_lifetime = false;
+        let mut has_non_input_lifetime = false;
+
         program.relations.into_iter().for_each(|relation| {
             let name = relation.name.to_string();
             if !rel_names.insert(relation.name.clone()) {
                 abort!(relation.name.span(), "Duplicate relation name: {}", name);
             }
 
+            if let Some(t) = relation.generics.type_params().next() {
+                abort!(t.span(), "Type parameters are not supported in relations");
+            }
+            if let Some(c) = relation.generics.const_params().next() {
+                abort!(c.span(), "Const parameters are not supported in relations");
+            }
+            let num_lifetimes = relation.generics.lifetimes().count();
+
             if let Some(ref attr) = relation.attribute {
                 match attr.to_string().as_ref() {
                     "input" => {
                         rels_input.insert(name, relation);
+                        if num_lifetimes > 0 {
+                            has_input_lifetime = true;
+                        }
                     }
                     "output" => {
-                        output_order.push(relation.name.clone());
+                        output_order.push((relation.name.clone(), num_lifetimes));
                         rels_output.insert(name, relation);
+                        if num_lifetimes > 0 {
+                            has_non_input_lifetime = true;
+                        }
                     }
                     s => abort!(
                         attr.span(),
@@ -258,9 +278,35 @@ impl Context {
                     ),
                 }
             } else {
+                if num_lifetimes > 0 {
+                    has_non_input_lifetime = true;
+                }
                 rels_intermediate.insert(name, relation);
             }
         });
+
+        // all lifetimes currently are set to the input lifetime, so one needs to
+        // be present somewhere
+        if has_non_input_lifetime && !has_input_lifetime {
+            // This should be the exception (assuming most crepe programs are
+            // well "lifetimed") so for all structs that have lifetimes but
+            // should not have one, an error gets emitted
+
+            for r in rels_output.values() {
+                if r.generics.lifetimes().next().is_some() {
+                    emit_error!(
+                        r.generics,
+                        "Lifetime on output relation without any input relations having a lifetime"
+                    );
+                }
+            }
+
+            for r in rels_intermediate.values() {
+                if r.generics.lifetimes().next().is_some() {
+                    emit_error!(r.generics, "Lifetime on intermediate relation without any input relations having a lifetime");
+                }
+            }
+        }
 
         // Read in rules, ensuring that there are no undefined relations, or
         // relations declared with incorrect arity.
@@ -345,6 +391,7 @@ impl Context {
         // context-sensitive logic.
         let rules = program.rules;
         Self {
+            has_lifetime: has_input_lifetime,
             rels_input,
             rels_output,
             output_order,
@@ -434,6 +481,7 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
             let struct_token = &relation.struct_token;
             let vis = &relation.visibility;
             let name = &relation.name;
+            let generics = &relation.generics;
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
             quote_spanned! {name.span()=>
@@ -445,7 +493,7 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
                     ::core::hash::Hash,
                 )]
                 #(#attrs)*
-                #vis #struct_token #name(#fields)#semi_token
+                #vis #struct_token #name #generics (#fields)#semi_token
             }
         })
         .collect()
@@ -481,16 +529,26 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         .values()
         .map(|relation| {
             let name = &relation.name;
+
+            // because the generics have been validated to only contain lifetimes
+            // no further checking is done here.
+            let lifetimes = relation
+                .generics
+                .lifetimes()
+                .map(|l| Lifetime::new("'a", l.span()));
+
             let lowercase_name = to_lowercase(name);
             quote! {
-                #lowercase_name: ::std::vec::Vec<#name>,
+                #lowercase_name: ::std::vec::Vec<#name<#(#lifetimes),*>>,
             }
         })
         .collect();
 
+    let lifetime = lifetime(context.has_lifetime);
+
     quote! {
         #[derive(::core::default::Default)]
-        struct Crepe {
+        struct Crepe #lifetime {
             #fields
         }
     }
@@ -499,8 +557,11 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
 fn make_runtime_impl(context: &Context) -> proc_macro2::TokenStream {
     let builders = make_extend(&context);
     let run = make_run(&context);
+
+    let lifetime = lifetime(context.has_lifetime);
+
     quote! {
-        impl Crepe {
+        impl #lifetime Crepe #lifetime {
             fn new() -> Self {
                 ::core::default::Default::default()
             }
@@ -516,20 +577,29 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
         .values()
         .map(|relation| {
             let name = &relation.name;
+
+            let lifetimes = relation
+                .generics
+                .lifetimes()
+                .map(|l| Lifetime::new("'a", l.span()))
+                .collect::<Vec<_>>();
+
+            let lifetime = lifetime(context.has_lifetime);
+
             let lower = to_lowercase(name);
             quote! {
-                impl ::core::iter::Extend<#name> for Crepe {
+                impl #lifetime ::core::iter::Extend<#name<#(#lifetimes),*>> for Crepe #lifetime {
                     fn extend<T>(&mut self, iter: T)
                     where
-                        T: ::core::iter::IntoIterator<Item = #name>,
+                        T: ::core::iter::IntoIterator<Item = #name<#(#lifetimes),*>>,
                     {
                         self.#lower.extend(iter);
                     }
                 }
-                impl<'a> ::core::iter::Extend<&'a #name> for Crepe {
+                impl<'a> ::core::iter::Extend<&'a #name<#(#lifetimes),*>> for Crepe #lifetime {
                     fn extend<T>(&mut self, iter: T)
                     where
-                        T: ::core::iter::IntoIterator<Item = &'a #name>,
+                        T: ::core::iter::IntoIterator<Item = &'a #name<#(#lifetimes),*>>,
                     {
                         self.extend(iter.into_iter().copied());
                     }
@@ -626,10 +696,17 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let lower = to_lowercase(name);
             let var = format_ident!("__{}", lower);
             let var_update = format_ident!("__{}_update", lower);
+
+            let lifetimes = rel
+                .generics
+                .lifetimes()
+                .map(|l| Lifetime::new("'a", l.span()))
+                .collect::<Vec<_>>();
+
             quote! {
-                let mut #var: ::std::collections::HashSet<#name> =
+                let mut #var: ::std::collections::HashSet<#name<#(#lifetimes),*>> =
                     ::std::collections::HashSet::new();
-                let mut #var_update: ::std::collections::HashSet<#name> =
+                let mut #var_update: ::std::collections::HashSet<#name<#(#lifetimes),*>> =
                     ::std::collections::HashSet::new();
             }
         });
@@ -640,9 +717,15 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let rel_name = &rel.name;
             let index_name = index.to_ident();
             let key_type = index.key_type(context);
+            let lifetimes = rel
+                .generics
+                .lifetimes()
+                .map(|l| Lifetime::new("'a", l.span()))
+                .collect::<Vec<_>>();
+
             quote! {
                 let mut #index_name:
-                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
+                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name<#(#lifetimes),*>>> =
                     ::std::collections::HashMap::new();
             }
         });
@@ -660,7 +743,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     };
 
     let output = {
-        let output_fields = context.output_order.iter().map(|name| {
+        let output_fields = context.output_order.iter().map(|(name, _)| {
             let lower = to_lowercase(name);
             format_ident!("__{}", lower)
         });
@@ -712,8 +795,15 @@ fn make_stratum(
             let name = &rel.name;
             let lower = to_lowercase(name);
             let rel_new = format_ident!("__{}_new", lower);
+
+            let lifetimes = rel
+                .generics
+                .lifetimes()
+                .map(|l| Lifetime::new("'a", l.span()))
+                .collect::<Vec<_>>();
+
             quote! {
-                let mut #rel_new: ::std::collections::HashSet<#name> =
+                let mut #rel_new: ::std::collections::HashSet<#name<#(#lifetimes),*>> =
                     ::std::collections::HashSet::new();
             }
         })
@@ -775,13 +865,19 @@ fn make_updates(
             .expect("index relation should be found in context");
         let rel_name = &rel.name;
         let rel_update = format_ident!("__{}_update", to_lowercase(rel_name));
+        let lifetimes = rel
+            .generics
+            .lifetimes()
+            .map(|l| Lifetime::new("'a", l.span()))
+            .collect::<Vec<_>>();
+
         let index_name = index.to_ident();
         let index_name_update = format_ident!("{}_update", index_name);
         let key_type = index.key_type(context);
         let bound_pos = index.bound_pos();
         Some(quote! {
             let mut #index_name_update:
-                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
+                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name<#(#lifetimes),*>>> =
                 ::std::collections::HashMap::new();
             for &__crepe_var in #rel_update.iter() {
                 #index_name
@@ -988,7 +1084,11 @@ fn make_clause(
 }
 
 fn make_output_ty(context: &Context) -> proc_macro2::TokenStream {
-    let fields = &context.output_order;
+    let fields = context.output_order.iter().map(|(name, num_lifetimes)| {
+        let lifetimes = (0..*num_lifetimes).map(|_| quote! { 'a });
+        quote! { #name < #(#lifetimes),* > }
+    });
+
     quote! {
         (#(::std::collections::HashSet<#fields>,)*)
     }
@@ -1033,4 +1133,13 @@ fn is_datalog_var(expr: &Expr) -> Option<Ident> {
 fn to_lowercase(name: &Ident) -> Ident {
     let s = name.to_string().to_lowercase();
     Ident::new(&s, name.span())
+}
+
+/// Create a tokenstream for a lifetime bound/application if it's needed
+fn lifetime(needs_lifetime: bool) -> proc_macro2::TokenStream {
+    if needs_lifetime {
+        quote! { <'a> }
+    } else {
+        quote! {}
+    }
 }

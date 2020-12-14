@@ -49,16 +49,16 @@ mod datalog_str {
 
     crepe! {
         @input
-        struct Edge(&'static str, &'static str);
+        struct Edge<'a>(&'a str, &'a str);
 
         @output
-        struct Tc(&'static str, &'static str);
+        struct Tc<'a>(&'a str, &'a str);
 
         Tc(x, y) <- Edge(x, y);
         Tc(x, z) <- Edge(x, y), Tc(y, z);
     }
 
-    pub fn run(edges: &[(&'static str, &'static str)]) -> Vec<(&'static str, &'static str)> {
+    pub fn run<'a>(edges: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
         let mut runtime = Crepe::new();
         runtime.extend(edges.iter().map(|&(a, b)| Edge(a, b)));
         let (tc,) = runtime.run();

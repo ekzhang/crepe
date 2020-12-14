@@ -1,7 +1,9 @@
 //! Parsing logic
 
 use syn::punctuated::Punctuated;
-use syn::{parenthesized, token, Attribute, Expr, ExprLet, Ident, Result, Token, Visibility};
+use syn::{
+    parenthesized, token, Attribute, Expr, ExprLet, Generics, Ident, Result, Token, Visibility,
+};
 use syn::{
     parse::{Parse, ParseStream},
     Field,
@@ -40,6 +42,7 @@ pub struct Relation {
     pub visibility: Visibility,
     pub struct_token: Token![struct],
     pub name: Ident,
+    pub generics: Generics,
     pub paren_token: token::Paren,
     pub fields: Punctuated<Field, Token![,]>,
     pub semi_token: Token![;],
@@ -61,6 +64,7 @@ impl Parse for Relation {
             visibility: input.parse()?,
             struct_token: input.parse()?,
             name: input.parse()?,
+            generics: input.parse()?,
             paren_token: parenthesized!(content in input),
             fields: content.parse_terminated(Field::parse_unnamed)?,
             semi_token: input.parse()?,

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add support for lifetimes in relations (#9)
+
 ## 0.1.3 - 2020-11-21
 
 - Add shorter syntax for defining fact-rules (#6)

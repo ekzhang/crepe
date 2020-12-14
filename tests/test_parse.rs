@@ -17,6 +17,11 @@ mod datalog {
         struct Intermediate(i32, u64, char);
         struct Unit();
 
+        @input
+        struct Borrowed<'a>(&'a str);
+
+        struct Test<'a>(&'a u64);
+
         Tc(x, y) <- Edge(x, y);
         Tc(x, z) <- Edge(x, y), Tc(y, z), (z > 5);
 
