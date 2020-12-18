@@ -13,8 +13,18 @@ edition = "2018"
 [lib]
 proc-macro = true
 
+[[bench]]
+name = "graph_walking"
+harness = false
+
+[[bench]]
+name = "fibonacci"
+harness = false
+
+
 [dev-dependencies]
 trybuild = "1.0"
+criterion = "0.3"
 
 [dependencies]
 syn = { version = "1.0", features = ["full"] }
