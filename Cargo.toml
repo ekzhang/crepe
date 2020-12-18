@@ -25,6 +25,7 @@ harness = false
 [dev-dependencies]
 trybuild = "1.0"
 criterion = "0.3"
+fnv = "1.0"
 
 [dependencies]
 syn = { version = "1.0", features = ["full"] }

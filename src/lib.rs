@@ -542,16 +542,16 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///
 /// Here's an example of what might be generated for transitive closure:
 /// ```ignore
-/// fn run(self) -> (::std::collections::HashSet<Tc>,) {
+/// fn run_with_hasher<S: BuildHasher + Default>(self) -> (::std::collections::HashSet<Tc, S>,) {
 ///     // Relations
-///     let mut __edge: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
-///     let mut __edge_update: ::std::collections::HashSet<Edge> = ::std::collections::HashSet::new();
-///     let mut __tc: ::std::collections::HashSet<Tc> = ::std::collections::HashSet::new();
-///     let mut __tc_update: ::std::collections::HashSet<Tc> = ::std::collections::HashSet::new();
+///     let mut __edge: ::std::collections::HashSet<Edge, S> = ::std::collections::HashSet::default();
+///     let mut __edge_update: ::std::collections::HashSet<Edge, S> = ::std::collections::HashSet::default();
+///     let mut __tc: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
+///     let mut __tc_update: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
 ///
 ///     // Indices
-///     let mut __tc_index_bf: ::std::collections::HashMap<(i32,), ::std::vec::Vec<Tc>> =
-///         ::std::collections::HashMap::new();
+///     let mut __tc_index_bf: ::std::collections::HashMap<(i32,), ::std::vec::Vec<Tc>, S> =
+///         ::std::collections::HashMap::default();
 ///
 ///     // Input relations
 ///     __edge_update.extend(self.edge);
@@ -565,8 +565,8 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///         }
 ///         __edge.extend(&__edge_update);
 ///
-///         let mut __tc_new: ::std::collections::HashSet<Tc> = ::std::collections::HashSet::new();
-///         let mut __edge_new: ::std::collections::HashSet<Tc> = ::std::collections::HashSet::new();
+///         let mut __tc_new: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
+///         let mut __edge_new: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
 ///
 ///         for &__crepe_var_0 in __edge.iter() {
 ///             let x = __crepe_var_0.0;
@@ -624,10 +624,10 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let var = format_ident!("__{}", lower);
             let var_update = format_ident!("__{}_update", lower);
             quote! {
-                let mut #var: ::std::collections::HashSet<#name> =
-                    ::std::collections::HashSet::new();
-                let mut #var_update: ::std::collections::HashSet<#name> =
-                    ::std::collections::HashSet::new();
+                let mut #var: ::std::collections::HashSet<#name, S> =
+                    ::std::collections::HashSet::default();
+                let mut #var_update: ::std::collections::HashSet<#name, S> =
+                    ::std::collections::HashSet::default();
             }
         });
         let init_indices = indices.iter().map(|index| {
@@ -639,8 +639,8 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let key_type = index.key_type(context);
             quote! {
                 let mut #index_name:
-                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
-                    ::std::collections::HashMap::new();
+                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>, S> =
+                    ::std::collections::HashMap::default();
             }
         });
         let load_inputs = context.rels_input.values().map(|rel| {
@@ -666,12 +666,17 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
         }
     };
 
-    let output_ty = make_output_ty(&context);
+    let output_ty_hasher = make_output_ty(&context, quote! { S });
+    let output_ty_default = make_output_ty(&context, quote! {});
     quote! {
-        fn run(self) -> #output_ty {
+        fn run_with_hasher<S: ::std::hash::BuildHasher + Default>(self) -> #output_ty_hasher {
             #initialize
             #main_loops
             #output
+        }
+
+        fn run(self) -> #output_ty_default {
+            self.run_with_hasher::<::std::collections::hash_map::RandomState>()
         }
     }
 }
@@ -710,8 +715,8 @@ fn make_stratum(
             let lower = to_lowercase(name);
             let rel_new = format_ident!("__{}_new", lower);
             quote! {
-                let mut #rel_new: ::std::collections::HashSet<#name> =
-                    ::std::collections::HashSet::new();
+                let mut #rel_new: ::std::collections::HashSet<#name, S> =
+                    ::std::collections::HashSet::default();
             }
         })
         .collect();
@@ -778,8 +783,8 @@ fn make_updates(
         let bound_pos = index.bound_pos();
         Some(quote! {
             let mut #index_name_update:
-                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>> =
-                ::std::collections::HashMap::new();
+                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name>, S> =
+                ::std::collections::HashMap::default();
             for &__crepe_var in #rel_update.iter() {
                 #index_name
                     .entry((#(__crepe_var.#bound_pos,)*))
@@ -984,10 +989,10 @@ fn make_clause(
     }
 }
 
-fn make_output_ty(context: &Context) -> proc_macro2::TokenStream {
+fn make_output_ty(context: &Context, hasher: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     let fields = &context.output_order;
     quote! {
-        (#(::std::collections::HashSet<#fields>,)*)
+        (#(::std::collections::HashSet<#fields, #hasher>,)*)
     }
 }
 
