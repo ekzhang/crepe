@@ -151,7 +151,7 @@ use strata::Strata;
 /// # Evaluation Mode
 /// All generated code uses semi-naive evaluation (see Chapter 3 of _Datalog
 /// and Recursive Query Processing_), and it is split into multiple strata to
-/// enable stratified negation. For example, we can extend the code above to
+/// enable stratified negation. For example, we can extend the first example to
 /// also compute the complement of transitive closure in a graph:
 /// ```
 /// mod datalog {
@@ -188,6 +188,34 @@ use strata::Strata;
 ///     }
 /// }
 /// # fn main() {}
+/// ```
+///
+/// # Lifetimes and Attributes
+/// This macro allows you to specify attributes, visibility modifiers, and
+/// lifetimes on the relation structs. These can include additional `derive`
+/// attributes, and lifetimes can be used to construct relations that include
+/// non-owning references. The following example computes suffixes of words.
+/// ```
+/// use crepe::crepe;
+///
+/// crepe! {
+///     @input
+///     struct Word<'a>(&'a str);
+///
+///     @output
+///     #[derive(Debug)]
+///     struct Suffix<'a>(&'a str);
+///
+///     Suffix(w) <- Word(w);
+///     Suffix(&w[1..]) <- Suffix(w), (!w.is_empty());
+/// }
+///
+/// fn main() {
+///     let mut runtime = Crepe::new();
+///     runtime.extend(&[Word("banana"), Word("bandana")]);
+///     let (suffixes,) = runtime.run();
+///     println!("{:?}", suffixes);
+/// }
 /// ```
 ///
 /// # Hygiene
