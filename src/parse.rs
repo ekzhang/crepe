@@ -1,13 +1,11 @@
 //! Parsing logic
 
-use quote::ToTokens;
+use quote::{quote, ToTokens};
+use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
-    parenthesized, token, Attribute, Expr, ExprLet, Generics, Ident, Result, Token, Visibility,
-};
-use syn::{
-    parse::{Parse, ParseStream},
-    Field,
+    parenthesized, parse_quote, token, Attribute, Expr, ExprLet, Field, Generics, Ident, Result,
+    Token, Visibility,
 };
 
 #[derive(Clone)]
@@ -114,8 +112,8 @@ impl Parse for Rule {
         if lookahead.peek(Token![;]) {
             let semi_token = input.parse()?;
 
-            let arrow_token = syn::parse_quote!(<-);
-            let clauses = syn::parse_quote!((true));
+            let arrow_token = parse_quote!(<-);
+            let clauses = parse_quote!((true));
 
             Ok(Self {
                 goal,
@@ -189,17 +187,17 @@ impl Parse for Fact {
 
 #[derive(Clone)]
 pub enum FactField {
-    Ignored(syn::Token![_]),
-    Ref(syn::Token![ref], syn::Ident),
-    Expr(Box<syn::Expr>),
+    Ignored(Token![_]),
+    Ref(Token![ref], Ident),
+    Expr(Box<Expr>),
 }
 
 impl ToTokens for FactField {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
-            FactField::Ignored(t) => tokens.extend(quote::quote! { #t }),
-            FactField::Ref(ref_tok, ident) => tokens.extend(quote::quote! { #ref_tok #ident }),
-            FactField::Expr(expr) => tokens.extend(quote::quote! { #expr }),
+            FactField::Ignored(t) => tokens.extend(quote! { #t }),
+            FactField::Ref(ref_tok, ident) => tokens.extend(quote! { #ref_tok #ident }),
+            FactField::Expr(expr) => tokens.extend(quote! { #expr }),
         }
     }
 }

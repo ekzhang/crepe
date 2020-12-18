@@ -42,7 +42,7 @@ fn test_transitive_closure() {
     assert_eq!(result, expected);
 }
 
-// Version of the above test with &'static str
+// Version of the above test with &'a str
 
 mod datalog_str {
     use crepe::crepe;

@@ -245,14 +245,12 @@ pub fn crepe(input: TokenStream) -> TokenStream {
 /// Function that takes a `TokenStream` as input, and returns a `TokenStream`
 type QuoteWrapper = dyn Fn(proc_macro2::TokenStream) -> proc_macro2::TokenStream;
 
-type NumLifetimes = usize;
-
 /// Intermediate representation for Datalog compilation
 struct Context {
     has_input_lifetime: bool,
     rels_input: HashMap<String, Relation>,
     rels_output: HashMap<String, Relation>,
-    output_order: Vec<(Ident, NumLifetimes)>,
+    output_order: Vec<Ident>,
     rels_intermediate: HashMap<String, Relation>,
     rules: Vec<Rule>,
     strata: Strata,
@@ -268,7 +266,7 @@ impl Context {
         let mut output_order = Vec::new();
 
         let mut has_input_lifetime = false;
-        let mut has_non_input_lifetime = false;
+        let mut has_output_lifetime = false;
 
         program.relations.into_iter().for_each(|relation| {
             let name = relation.name.to_string();
@@ -292,16 +290,13 @@ impl Context {
                     }
                 }
                 Ok(RelationType::Output) => {
-                    output_order.push((relation.name.clone(), num_lifetimes));
+                    output_order.push(relation.name.clone());
                     rels_output.insert(name, relation);
                     if num_lifetimes > 0 {
-                        has_non_input_lifetime = true;
+                        has_output_lifetime = true;
                     }
                 }
                 Ok(RelationType::Intermediate) => {
-                    if num_lifetimes > 0 {
-                        has_non_input_lifetime = true;
-                    }
                     rels_intermediate.insert(name, relation);
                 }
                 Err(attr) => {
@@ -316,7 +311,7 @@ impl Context {
 
         // all lifetimes currently are set to the input lifetime, so one needs to
         // be present somewhere
-        if has_non_input_lifetime && !has_input_lifetime {
+        if has_output_lifetime && !has_input_lifetime {
             // This should be the exception (assuming most crepe programs are
             // well "lifetimed") so for all structs that have lifetimes but
             // should not have one, an error gets emitted
@@ -552,30 +547,6 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
         .collect()
 }
 
-// Generated code should roughly look something like:
-// ```ignore
-// #[derive(::core::default::Default)]
-// struct Crepe {
-//     edge: ::std::vec::Vec<Edge>,
-// }
-// impl Crepe {
-//     fn new() -> Self {
-//         ::core::default::Default::default()
-//     }
-//     fn run(self) -> Output {
-//         // core logic here
-//     }
-// }
-// impl ::core::iter::Extend<Edge> for Crepe {
-//     fn extend<T>(&mut self, iter: T)
-//     where
-//         T: ::core::iter::IntoIterator<Item = Edge>,
-//     {
-//         self.edge.extend(iter);
-//     }
-// }
-// ```
-
 fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
     let fields: proc_macro2::TokenStream = context
         .rels_input
@@ -654,16 +625,25 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///
 /// Here's an example of what might be generated for transitive closure:
 /// ```ignore
-/// fn run_with_hasher<S: BuildHasher + Default>(self) -> (::std::collections::HashSet<Tc, S>,) {
+/// fn run_with_hasher<CrepeHasher: BuildHasher + Default>(
+///     self,
+/// ) -> (::std::collections::HashSet<Tc, CrepeHasher>,) {
 ///     // Relations
-///     let mut __edge: ::std::collections::HashSet<Edge, S> = ::std::collections::HashSet::default();
-///     let mut __edge_update: ::std::collections::HashSet<Edge, S> = ::std::collections::HashSet::default();
-///     let mut __tc: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
-///     let mut __tc_update: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
+///     let mut __edge: ::std::collections::HashSet<Edge, CrepeHasher> =
+///         ::std::collections::HashSet::default();
+///     let mut __edge_update: ::std::collections::HashSet<Edge, CrepeHasher> =
+///         ::std::collections::HashSet::default();
+///     let mut __tc: ::std::collections::HashSet<Tc, CrepeHasher> =
+///         ::std::collections::HashSet::default();
+///     let mut __tc_update: ::std::collections::HashSet<Tc, CrepeHasher> =
+///         ::std::collections::HashSet::default();
 ///
 ///     // Indices
-///     let mut __tc_index_bf: ::std::collections::HashMap<(i32,), ::std::vec::Vec<Tc>, S> =
-///         ::std::collections::HashMap::default();
+///     let mut __tc_index_bf: ::std::collections::HashMap<
+///         (i32,),
+///         ::std::vec::Vec<Tc>,
+///         CrepeHasher,
+///     > = ::std::collections::HashMap::default();
 ///
 ///     // Input relations
 ///     __edge_update.extend(self.edge);
@@ -672,30 +652,34 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///     let mut __crepe_first_iteration = true;
 ///     while __crepe_first_iteration || !(__edge_update.is_empty() && __tc_update.is_empty()) {
 ///         __tc.extend(&__tc_update);
-///         for ref __crepe_var_ref in __tc_update.iter() {
-///             let __crepe_var = *__crepe_var_ref;
-///             __tc_index_bf.entry((__crepe_var.0,)).or_default().push(*__crepe_var);
+///         for __crepe_var in __tc_update.iter() {
+///             __tc_index_bf
+///                 .entry((__crepe_var.0,))
+///                 .or_default()
+///                 .push(*__crepe_var);
 ///         }
 ///         __edge.extend(&__edge_update);
 ///
-///         let mut __tc_new: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
-///         let mut __edge_new: ::std::collections::HashSet<Tc, S> = ::std::collections::HashSet::default();
+///         let mut __tc_new: ::std::collections::HashSet<Tc, CrepeHasher> =
+///             ::std::collections::HashSet::default();
+///         let mut __edge_new: ::std::collections::HashSet<Tc, CrepeHasher> =
+///             ::std::collections::HashSet::default();
 ///
-///         for ref __crepe_var_0 in __edge.iter() {
-///             let x = __crepe_var_0.0;
-///             let y = __crepe_var_0.1;
+///         for __crepe_var in __edge.iter() {
+///             let x = __crepe_var.0;
+///             let y = __crepe_var.1;
 ///             let __crepe_goal = Tc(x, y);
 ///             if !__tc.contains(__crepe_goal) {
 ///                 __tc_new.insert(*__crepe_goal);
 ///             }
 ///         }
 ///
-///         for ref __crepe_var_0 in __edge.iter() {
-///             let x = __crepe_var_0.0;
-///             let y = __crepe_var_0.1;
-///             if let Some(__iter_1) = __tc_index_bf.get(&(y,)) {
-///                 for ref __crepe_var_1 in __iter_1.iter() {
-///                     let z = __crepe_var_1.1;
+///         for __crepe_var in __edge.iter() {
+///             let x = __crepe_var.0;
+///             let y = __crepe_var.1;
+///             if let Some(__crepe_iter) = __tc_index_bf.get(&(y,)) {
+///                 for __crepe_var in __crepe_iter.iter() {
+///                     let z = __crepe_var.1;
 ///                     let __crepe_goal = Tc(x, z);
 ///                     if !__tc.contains(__crepe_goal) {
 ///                         __tc_new.insert(*__crepe_goal);
@@ -736,7 +720,8 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let lower = to_lowercase(&rel.name);
             let var = format_ident!("__{}", lower);
             quote! {
-                let mut #var: ::std::collections::HashSet<#rel_ty> =self.#lower.into_iter().collect();
+                let mut #var: ::std::collections::HashSet<#rel_ty, CrepeHasher> =
+                    self.#lower.into_iter().collect();
             }
         });
 
@@ -747,9 +732,9 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let var_update = format_ident!("__{}_update", lower);
 
             quote! {
-                let mut #var: ::std::collections::HashSet<#rel_ty, S> =
+                let mut #var: ::std::collections::HashSet<#rel_ty, CrepeHasher> =
                     ::std::collections::HashSet::default();
-                let mut #var_update: ::std::collections::HashSet<#rel_ty, S> =
+                let mut #var_update: ::std::collections::HashSet<#rel_ty, CrepeHasher> =
                     ::std::collections::HashSet::default();
             }
         });
@@ -762,9 +747,11 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let key_type = index.key_type(context);
 
             quote! {
-                let mut #index_name:
-                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_ty>, S> =
-                    ::std::collections::HashMap::default();
+                let mut #index_name: ::std::collections::HashMap<
+                    (#(#key_type,)*),
+                    ::std::vec::Vec<#rel_ty>,
+                    CrepeHasher
+                > = ::std::collections::HashMap::default();
             }
         });
 
@@ -775,7 +762,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     };
 
     let output = {
-        let output_fields = context.output_order.iter().map(|(name, _)| {
+        let output_fields = context.output_order.iter().map(|name| {
             let lower = to_lowercase(name);
             format_ident!("__{}", lower)
         });
@@ -784,10 +771,12 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
         }
     };
 
-    let output_ty_hasher = make_output_ty(&context, quote! { S });
+    let output_ty_hasher = make_output_ty(&context, quote! { CrepeHasher });
     let output_ty_default = make_output_ty(&context, quote! {});
     quote! {
-        fn run_with_hasher<S: ::std::hash::BuildHasher + Default>(self) -> #output_ty_hasher {
+        fn run_with_hasher<
+            CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default
+        >(self) -> #output_ty_hasher {
             #initialize
             #main_loops
             #output
@@ -839,7 +828,7 @@ fn make_stratum(
             let lower = to_lowercase(&rel.name);
             let rel_new = format_ident!("__{}_new", lower);
             Some(quote! {
-                let mut #rel_new: ::std::collections::HashSet<#rel_ty, S> =
+                let mut #rel_new: ::std::collections::HashSet<#rel_ty, CrepeHasher> =
                     ::std::collections::HashSet::default();
             })
         })
@@ -921,11 +910,12 @@ fn make_updates(
         let key_type = index.key_type(context);
         let bound_pos = index.bound_pos();
         Some(quote! {
-            let mut #index_name_update:
-                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_ty>, S> =
-                ::std::collections::HashMap::default();
-            for ref __crepe_var_ref in #rel_update.iter() {
-                let __crepe_var = *__crepe_var_ref;
+            let mut #index_name_update: ::std::collections::HashMap<
+                (#(#key_type,)*),
+                ::std::vec::Vec<#rel_ty>,
+                CrepeHasher
+            > = ::std::collections::HashMap::default();
+            for __crepe_var in #rel_update.iter() {
                 #index_name
                     .entry((#(__crepe_var.#bound_pos,)*))
                     .or_default()
@@ -1057,7 +1047,7 @@ fn make_clause(
                         index_mode.push(IndexMode::Free);
                         datalog_vars.insert(ident.to_string());
                         setters.push(quote! {
-                            let #ident = &__crepe_var_ref.#idx;
+                            let #ident = &__crepe_var.#idx;
                         });
                     }
                     FactField::Expr(expr) => {
@@ -1088,8 +1078,7 @@ fn make_clause(
                 // If no fields are bound, we don't need an index
                 Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
-                        for ref __crepe_var_ref in #rel.iter() {
-                            let __crepe_var = *__crepe_var_ref;
+                        for __crepe_var in #rel.iter() {
                             #setters
                             #body
                         }
@@ -1117,8 +1106,7 @@ fn make_clause(
                 Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
                         if let Some(__crepe_iter) = #index_name.get(&(#(#bound_fields,)*)) {
-                            for ref __crepe_var_ref in __crepe_iter.iter() {
-                                let __crepe_var = *__crepe_var_ref;
+                            for __crepe_var in __crepe_iter.iter() {
                                 #setters
                                 #body
                             }
@@ -1149,9 +1137,9 @@ fn make_clause(
 }
 
 fn make_output_ty(context: &Context, hasher: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
-    let fields = context.output_order.iter().map(|(name, num_lifetimes)| {
-        let lifetimes = (0..*num_lifetimes).map(|_| quote! { 'a });
-        quote! { #name < #(#lifetimes),* > }
+    let fields = context.output_order.iter().map(|name| {
+        let rel = context.rels_output.get(&name.to_string()).unwrap();
+        relation_type(&rel, LifetimeUsage::Item)
     });
 
     quote! {
