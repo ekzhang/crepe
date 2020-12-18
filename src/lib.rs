@@ -71,6 +71,8 @@ use strata::Strata;
 /// - `Crepe::run(self)`: evaluates the Datalog program on the given inputs,
 ///   consuming the runtime object, and returns a tuple of `HashSet<Rel>`s
 ///   containing the final derived @output structs.
+/// - `Crepe::run_with_hasher::<S: BuildHasher + Default>(self)`: similar to the
+///   `run` method, but internally uses a custom hasher.
 ///
 /// In order for the engine to work, all relations must be tuple structs, and
 /// they automatically derive the `Eq`, `PartialEq`, `Hash`, `Copy`, and
@@ -217,6 +219,8 @@ use strata::Strata;
 ///     println!("{:?}", suffixes);
 /// }
 /// ```
+/// We also support the `ref` keyword for binding a variable by reference rather
+/// than copying it, which can improve performance in some cases.
 ///
 /// # Hygiene
 /// In addition to the relation structs, this macro generates implementations
@@ -363,27 +367,17 @@ impl Context {
                     "Relations marked as @input cannot be derived from a rule."
                 )
             }
-            if rule
-                .goal
-                .fields
-                .iter()
-                .any(|f| matches!(f, FactField::Ignored(_)))
-            {
-                abort!(
-                    rule.goal.relation.span(),
-                    "Cannot have _ in goal atom of rule."
-                )
-            }
-            if rule
-                .goal
-                .fields
-                .iter()
-                .any(|f| matches!(f, FactField::Ref(_, _)))
-            {
-                abort!(
-                    rule.goal.relation.span(),
-                    "Cannot have `ref` in goal atom of rule."
-                )
+
+            for f in &rule.goal.fields {
+                match f {
+                    FactField::Ignored(token) => {
+                        abort!(token.span(), "Cannot have _ in goal atom of rule.")
+                    }
+                    FactField::Ref(token, _) => {
+                        abort!(token.span(), "Cannot have `ref` in goal atom of rule.")
+                    }
+                    FactField::Expr(_) => (),
+                }
             }
             rule.clauses.iter().for_each(|clause| {
                 if let Clause::Fact(fact) = clause {
@@ -655,8 +649,8 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///             let x = __crepe_var.0;
 ///             let y = __crepe_var.1;
 ///             let __crepe_goal = Tc(x, y);
-///             if !__tc.contains(__crepe_goal) {
-///                 __tc_new.insert(*__crepe_goal);
+///             if !__tc.contains(&__crepe_goal) {
+///                 __tc_new.insert(__crepe_goal);
 ///             }
 ///         }
 ///
@@ -667,8 +661,8 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///                 for __crepe_var in __crepe_iter.iter() {
 ///                     let z = __crepe_var.1;
 ///                     let __crepe_goal = Tc(x, z);
-///                     if !__tc.contains(__crepe_goal) {
-///                         __tc_new.insert(*__crepe_goal);
+///                     if !__tc.contains(&__crepe_goal) {
+///                         __tc_new.insert(__crepe_goal);
 ///                     }
 ///                 }
 ///             }
@@ -754,9 +748,9 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     let output_ty_hasher = make_output_ty(&context, quote! { CrepeHasher });
     let output_ty_default = make_output_ty(&context, quote! {});
     quote! {
-        fn run_with_hasher<
-            CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default
-        >(self) -> #output_ty_hasher {
+        fn run_with_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
+            self
+        ) -> #output_ty_hasher {
             #initialize
             #main_loops
             #output
@@ -1164,7 +1158,7 @@ enum LifetimeUsage {
     Local,
 }
 
-/// Returns the type of a relation, with lifetimes set to 'a
+/// Returns the type of a relation, with appropriate lifetimes
 fn relation_type(rel: &Relation, usage: LifetimeUsage) -> proc_macro2::TokenStream {
     let symbol = match rel.relation_type().unwrap() {
         RelationType::Input | RelationType::Output => "'a",

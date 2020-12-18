@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Add support for lifetimes in relations (#9)
+- Add support for lifetimes in relations and the `ref` keyword (#9)
+- Add benchmarks and support for custom hashers (#9)
 
 ## 0.1.3 - 2020-11-21
 
