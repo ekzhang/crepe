@@ -442,20 +442,6 @@ impl Context {
             .or_else(|| self.rels_output.get(name))
     }
 
-    fn is_input_relation(&self, name: &Ident) -> bool {
-        self.rels_input.contains_key(name.to_string().as_str())
-    }
-
-    fn input_relations(&self) -> impl Iterator<Item = &Relation> {
-        self.rels_input.values()
-    }
-
-    fn non_input_relations(&self) -> impl Iterator<Item = &Relation> {
-        self.rels_intermediate
-            .values()
-            .chain(self.rels_output.values())
-    }
-
     fn all_relations(&self) -> impl Iterator<Item = &Relation> {
         self.rels_input
             .values()
@@ -715,17 +701,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     };
 
     let initialize = {
-        let input_rels = context.input_relations().map(|rel| {
-            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
-            let lower = to_lowercase(&rel.name);
-            let var = format_ident!("__{}", lower);
-            quote! {
-                let mut #var: ::std::collections::HashSet<#rel_ty, CrepeHasher> =
-                    self.#lower.into_iter().collect();
-            }
-        });
-
-        let init_rels = context.non_input_relations().map(|rel| {
+        let init_rels = context.all_relations().map(|rel| {
             let rel_ty = relation_type(&rel, LifetimeUsage::Local);
             let lower = to_lowercase(&rel.name);
             let var = format_ident!("__{}", lower);
@@ -747,17 +723,21 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let key_type = index.key_type(context);
 
             quote! {
-                let mut #index_name: ::std::collections::HashMap<
-                    (#(#key_type,)*),
-                    ::std::vec::Vec<#rel_ty>,
-                    CrepeHasher
-                > = ::std::collections::HashMap::default();
+                let mut #index_name:
+                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_ty>, CrepeHasher> =
+                    ::std::collections::HashMap::default();
             }
         });
-
-        input_rels
-            .chain(init_rels)
+        let load_inputs = context.rels_input.values().map(|rel| {
+            let lower = to_lowercase(&rel.name);
+            let var_update = format_ident!("__{}_update", lower);
+            quote! {
+                #var_update.extend(self.#lower);
+            }
+        });
+        init_rels
             .chain(init_indices)
+            .chain(load_inputs)
             .collect::<proc_macro2::TokenStream>()
     };
 
@@ -805,32 +785,26 @@ fn make_stratum(
 
     let empty_cond: proc_macro2::TokenStream = current_rels
         .iter()
-        .filter_map(|rel| {
-            if rel.relation_type() == Ok(RelationType::Input) {
-                return None;
-            }
+        .map(|rel| {
             let lower = to_lowercase(&rel.name);
             let rel_update = format_ident!("__{}_update", lower);
-            Some(quote! {
+            quote! {
                 #rel_update.is_empty() &&
-            })
+            }
         })
         .chain(std::iter::once(quote! {true}))
         .collect();
 
     let new_decls: proc_macro2::TokenStream = current_rels
         .iter()
-        .filter_map(|rel| {
-            if rel.relation_type() == Ok(RelationType::Input) {
-                return None;
-            }
+        .map(|rel| {
             let rel_ty = relation_type(&rel, LifetimeUsage::Local);
             let lower = to_lowercase(&rel.name);
             let rel_new = format_ident!("__{}_new", lower);
-            Some(quote! {
+            quote! {
                 let mut #rel_new: ::std::collections::HashSet<#rel_ty, CrepeHasher> =
                     ::std::collections::HashSet::default();
-            })
+            }
         })
         .collect();
 
@@ -843,17 +817,13 @@ fn make_stratum(
 
     let set_update_to_new: proc_macro2::TokenStream = current_rels
         .iter()
-        .filter_map(|rel| {
-            if rel.relation_type() == Ok(RelationType::Input) {
-                return None;
-            }
-
+        .map(|rel| {
             let lower = to_lowercase(&rel.name);
             let rel_update = format_ident!("__{}_update", lower);
             let rel_new = format_ident!("__{}_new", lower);
-            Some(quote! {
+            quote! {
                 #rel_update = #rel_new;
-            })
+            }
         })
         .collect();
 
@@ -877,17 +847,13 @@ fn make_updates(
     stratum: &[Ident],
     indices: &HashSet<Index>,
 ) -> proc_macro2::TokenStream {
-    let rel_updates = stratum.iter().filter_map(|name| {
-        if context.is_input_relation(name) {
-            return None;
-        }
-
+    let rel_updates = stratum.iter().map(|name| {
         let lower = to_lowercase(name);
         let rel = format_ident!("__{}", lower);
         let rel_update = format_ident!("__{}_update", lower);
-        Some(quote! {
+        quote! {
             #rel.extend(&#rel_update);
-        })
+        }
     });
     let index_updates = indices.iter().filter_map(|index| {
         if !stratum.contains(&index.name) {
@@ -897,10 +863,6 @@ fn make_updates(
         let rel = context
             .get_relation(&index.name.to_string())
             .expect("index relation should be found in context");
-
-        if rel.relation_type() == Ok(RelationType::Input) {
-            return None;
-        }
 
         let rel_ty = relation_type(&rel, LifetimeUsage::Local);
         let rel_update = format_ident!("__{}_update", to_lowercase(&rel.name));
