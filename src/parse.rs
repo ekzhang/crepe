@@ -1,10 +1,11 @@
 //! Parsing logic
 
+use quote::{quote, ToTokens};
+use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{parenthesized, token, Attribute, Expr, ExprLet, Ident, Result, Token, Visibility};
 use syn::{
-    parse::{Parse, ParseStream},
-    Field,
+    parenthesized, parse_quote, token, Attribute, Expr, ExprLet, Field, Generics, Ident, Result,
+    Token, Visibility,
 };
 
 #[derive(Clone)]
@@ -33,6 +34,13 @@ impl Parse for Program {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationType {
+    Input,
+    Intermediate,
+    Output,
+}
+
 #[derive(Clone)]
 pub struct Relation {
     pub attribute: Option<Ident>,
@@ -40,9 +48,26 @@ pub struct Relation {
     pub visibility: Visibility,
     pub struct_token: Token![struct],
     pub name: Ident,
+    pub generics: Generics,
     pub paren_token: token::Paren,
     pub fields: Punctuated<Field, Token![,]>,
     pub semi_token: Token![;],
+}
+
+impl Relation {
+    pub fn relation_type(&self) -> std::result::Result<RelationType, &Ident> {
+        if let Some(attr) = &self.attribute {
+            if attr == "input" {
+                Ok(RelationType::Input)
+            } else if attr == "output" {
+                Ok(RelationType::Output)
+            } else {
+                Err(attr)
+            }
+        } else {
+            Ok(RelationType::Intermediate)
+        }
+    }
 }
 
 impl Parse for Relation {
@@ -61,6 +86,7 @@ impl Parse for Relation {
             visibility: input.parse()?,
             struct_token: input.parse()?,
             name: input.parse()?,
+            generics: input.parse()?,
             paren_token: parenthesized!(content in input),
             fields: content.parse_terminated(Field::parse_unnamed)?,
             semi_token: input.parse()?,
@@ -86,8 +112,8 @@ impl Parse for Rule {
         if lookahead.peek(Token![;]) {
             let semi_token = input.parse()?;
 
-            let arrow_token = syn::parse_quote!(<-);
-            let clauses = syn::parse_quote!((true));
+            let arrow_token = parse_quote!(<-);
+            let clauses = parse_quote!((true));
 
             Ok(Self {
                 goal,
@@ -133,7 +159,7 @@ pub struct Fact {
     pub negate: Option<Token![!]>,
     pub relation: Ident,
     pub paren_token: token::Paren,
-    pub fields: Punctuated<Option<Expr>, Token![,]>,
+    pub fields: Punctuated<FactField, Token![,]>,
 }
 
 impl Parse for Fact {
@@ -146,12 +172,32 @@ impl Parse for Fact {
             paren_token: parenthesized!(content in input),
             fields: content.parse_terminated(|input| {
                 if input.peek(Token![_]) {
-                    let _: Token![_] = input.parse()?;
-                    Ok(None)
+                    Ok(FactField::Ignored(input.parse()?))
+                } else if input.peek(Token![ref]) {
+                    let ref_tok: Token![ref] = input.parse()?;
+                    let ident: Ident = input.parse()?;
+                    Ok(FactField::Ref(ref_tok, ident))
                 } else {
-                    input.parse().map(Some)
+                    Ok(FactField::Expr(input.parse()?))
                 }
             })?,
         })
+    }
+}
+
+#[derive(Clone)]
+pub enum FactField {
+    Ignored(Token![_]),
+    Ref(Token![ref], Ident),
+    Expr(Box<Expr>),
+}
+
+impl ToTokens for FactField {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            FactField::Ignored(t) => tokens.extend(quote! { #t }),
+            FactField::Ref(ref_tok, ident) => tokens.extend(quote! { #ref_tok #ident }),
+            FactField::Expr(expr) => tokens.extend(quote! { #expr }),
+        }
     }
 }

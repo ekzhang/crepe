@@ -17,10 +17,17 @@ mod datalog {
         struct Intermediate(i32, u64, char);
         struct Unit();
 
+        @input
+        struct Borrowed<'a>(&'a str);
+
+        struct Test<'a>(&'a i32);
+
         Tc(x, y) <- Edge(x, y);
         Tc(x, z) <- Edge(x, y), Tc(y, z), (z > 5);
 
         Tc(x, y) <- let (x, y) = (3, 4);
+
+        Test(x) <- Edge(ref x, _);
 
         Intermediate(_x, crepe, z) <- (true), (false), Intermediate(_x, crepe, z);
         Intermediate(42, y, 'c') <- (true), (false), Intermediate(_x, y, _z);
