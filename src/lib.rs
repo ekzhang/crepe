@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter};
 use syn::{parse_macro_input, spanned::Spanned, Expr, Ident, Lifetime, Type};
 
-use parse::{Clause, Fact, Program, Relation, Rule};
+use parse::{Clause, Fact, FactField, Program, Relation, RelationType, Rule};
 use strata::Strata;
 
 /// The main macro, which lets you write a Datalog program declaratively.
@@ -249,7 +249,7 @@ type NumLifetimes = usize;
 
 /// Intermediate representation for Datalog compilation
 struct Context {
-    has_lifetime: bool,
+    has_input_lifetime: bool,
     rels_input: HashMap<String, Relation>,
     rels_output: HashMap<String, Relation>,
     output_order: Vec<(Ident, NumLifetimes)>,
@@ -284,32 +284,33 @@ impl Context {
             }
             let num_lifetimes = relation.generics.lifetimes().count();
 
-            if let Some(ref attr) = relation.attribute {
-                match attr.to_string().as_ref() {
-                    "input" => {
-                        rels_input.insert(name, relation);
-                        if num_lifetimes > 0 {
-                            has_input_lifetime = true;
-                        }
+            match relation.relation_type() {
+                Ok(RelationType::Input) => {
+                    rels_input.insert(name, relation);
+                    if num_lifetimes > 0 {
+                        has_input_lifetime = true;
                     }
-                    "output" => {
-                        output_order.push((relation.name.clone(), num_lifetimes));
-                        rels_output.insert(name, relation);
-                        if num_lifetimes > 0 {
-                            has_non_input_lifetime = true;
-                        }
+                }
+                Ok(RelationType::Output) => {
+                    output_order.push((relation.name.clone(), num_lifetimes));
+                    rels_output.insert(name, relation);
+                    if num_lifetimes > 0 {
+                        has_non_input_lifetime = true;
                     }
-                    s => abort!(
+                }
+                Ok(RelationType::Intermediate) => {
+                    if num_lifetimes > 0 {
+                        has_non_input_lifetime = true;
+                    }
+                    rels_intermediate.insert(name, relation);
+                }
+                Err(attr) => {
+                    abort!(
                         attr.span(),
                         "Invalid attribute @{}, expected '@input' or '@output'",
-                        s
-                    ),
+                        attr
+                    )
                 }
-            } else {
-                if num_lifetimes > 0 {
-                    has_non_input_lifetime = true;
-                }
-                rels_intermediate.insert(name, relation);
             }
         });
 
@@ -325,15 +326,6 @@ impl Context {
                     emit_error!(
                         r.generics,
                         "Lifetime on output relation without any input relations having a lifetime"
-                    );
-                }
-            }
-
-            for r in rels_intermediate.values() {
-                if r.generics.lifetimes().next().is_some() {
-                    emit_error!(
-                        r.generics,
-                        "Lifetime on intermediate relation without any input relations having a lifetime"
                     );
                 }
             }
@@ -376,10 +368,26 @@ impl Context {
                     "Relations marked as @input cannot be derived from a rule."
                 )
             }
-            if rule.goal.fields.iter().any(Option::is_none) {
+            if rule
+                .goal
+                .fields
+                .iter()
+                .any(|f| matches!(f, FactField::Ignored(_)))
+            {
                 abort!(
                     rule.goal.relation.span(),
                     "Cannot have _ in goal atom of rule."
+                )
+            }
+            if rule
+                .goal
+                .fields
+                .iter()
+                .any(|f| matches!(f, FactField::Ref(_, _)))
+            {
+                abort!(
+                    rule.goal.relation.span(),
+                    "Cannot have `ref` in goal atom of rule."
                 )
             }
             rule.clauses.iter().for_each(|clause| {
@@ -422,7 +430,7 @@ impl Context {
         // context-sensitive logic.
         let rules = program.rules;
         Self {
-            has_lifetime: has_input_lifetime,
+            has_input_lifetime,
             rels_input,
             rels_output,
             output_order,
@@ -437,6 +445,20 @@ impl Context {
             .get(name)
             .or_else(|| self.rels_intermediate.get(name))
             .or_else(|| self.rels_output.get(name))
+    }
+
+    fn is_input_relation(&self, name: &Ident) -> bool {
+        self.rels_input.contains_key(name.to_string().as_str())
+    }
+
+    fn input_relations(&self) -> impl Iterator<Item = &Relation> {
+        self.rels_input.values()
+    }
+
+    fn non_input_relations(&self) -> impl Iterator<Item = &Relation> {
+        self.rels_intermediate
+            .values()
+            .chain(self.rels_output.values())
     }
 
     fn all_relations(&self) -> impl Iterator<Item = &Relation> {
@@ -561,7 +583,7 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         .map(|relation| {
             // because the generics have been validated to only contain lifetimes
             // no further checking is done here.
-            let rel_ty = relation_type(&relation);
+            let rel_ty = relation_type(&relation, LifetimeUsage::Item);
             let lowercase_name = to_lowercase(&relation.name);
             quote! {
                 #lowercase_name: ::std::vec::Vec<#rel_ty>,
@@ -569,7 +591,7 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         })
         .collect();
 
-    let lifetime = lifetime(context.has_lifetime);
+    let lifetime = lifetime(context.has_input_lifetime);
 
     quote! {
         #[derive(::core::default::Default)]
@@ -583,7 +605,7 @@ fn make_runtime_impl(context: &Context) -> proc_macro2::TokenStream {
     let builders = make_extend(&context);
     let run = make_run(&context);
 
-    let lifetime = lifetime(context.has_lifetime);
+    let lifetime = lifetime(context.has_input_lifetime);
 
     quote! {
         impl #lifetime Crepe #lifetime {
@@ -601,8 +623,8 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
         .rels_input
         .values()
         .map(|relation| {
-            let rel_ty = relation_type(&relation);
-            let lifetime = lifetime(context.has_lifetime);
+            let rel_ty = relation_type(&relation, LifetimeUsage::Item);
+            let lifetime = lifetime(context.has_input_lifetime);
             let lower = to_lowercase(&relation.name);
             quote! {
                 impl #lifetime ::core::iter::Extend<#rel_ty> for Crepe #lifetime {
@@ -650,32 +672,33 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///     let mut __crepe_first_iteration = true;
 ///     while __crepe_first_iteration || !(__edge_update.is_empty() && __tc_update.is_empty()) {
 ///         __tc.extend(&__tc_update);
-///         for &__crepe_var in __tc_update.iter() {
-///             __tc_index_bf.entry((__crepe_var.0,)).or_default().push(__crepe_var);
+///         for ref __crepe_var_ref in __tc_update.iter() {
+///             let __crepe_var = *__crepe_var_ref;
+///             __tc_index_bf.entry((__crepe_var.0,)).or_default().push(*__crepe_var);
 ///         }
 ///         __edge.extend(&__edge_update);
 ///
 ///         let mut __tc_new: ::std::collections::HashSet<Tc> = ::std::collections::HashSet::new();
 ///         let mut __edge_new: ::std::collections::HashSet<Tc> = ::std::collections::HashSet::new();
 ///
-///         for &__crepe_var_0 in __edge.iter() {
+///         for ref __crepe_var_0 in __edge.iter() {
 ///             let x = __crepe_var_0.0;
 ///             let y = __crepe_var_0.1;
 ///             let __crepe_goal = Tc(x, y);
-///             if !__tc.contains(&__crepe_goal) {
-///                 __tc_new.insert(__crepe_goal);
+///             if !__tc.contains(__crepe_goal) {
+///                 __tc_new.insert(*__crepe_goal);
 ///             }
 ///         }
 ///
-///         for &__crepe_var_0 in __edge.iter() {
+///         for ref __crepe_var_0 in __edge.iter() {
 ///             let x = __crepe_var_0.0;
 ///             let y = __crepe_var_0.1;
 ///             if let Some(__iter_1) = __tc_index_bf.get(&(y,)) {
-///                 for &__crepe_var_1 in __iter_1.iter() {
+///                 for ref __crepe_var_1 in __iter_1.iter() {
 ///                     let z = __crepe_var_1.1;
 ///                     let __crepe_goal = Tc(x, z);
-///                     if !__tc.contains(&__crepe_goal) {
-///                         __tc_new.insert(__crepe_goal);
+///                     if !__tc.contains(__crepe_goal) {
+///                         __tc_new.insert(*__crepe_goal);
 ///                     }
 ///                 }
 ///             }
@@ -708,8 +731,17 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     };
 
     let initialize = {
-        let init_rels = context.all_relations().map(|rel| {
-            let rel_ty = relation_type(&rel);
+        let input_rels = context.input_relations().map(|rel| {
+            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
+            let lower = to_lowercase(&rel.name);
+            let var = format_ident!("__{}", lower);
+            quote! {
+                let mut #var: ::std::collections::HashSet<#rel_ty> =self.#lower.into_iter().collect();
+            }
+        });
+
+        let init_rels = context.non_input_relations().map(|rel| {
+            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
             let lower = to_lowercase(&rel.name);
             let var = format_ident!("__{}", lower);
             let var_update = format_ident!("__{}_update", lower);
@@ -725,7 +757,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let rel = context
                 .get_relation(&index.name.to_string())
                 .expect("index relation should be found in context");
-            let rel_ty = relation_type(&rel);
+            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
             let index_name = index.to_ident();
             let key_type = index.key_type(context);
 
@@ -735,16 +767,10 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
                     ::std::collections::HashMap::new();
             }
         });
-        let load_inputs = context.rels_input.values().map(|rel| {
-            let lower = to_lowercase(&rel.name);
-            let var_update = format_ident!("__{}_update", lower);
-            quote! {
-                #var_update.extend(self.#lower);
-            }
-        });
-        init_rels
+
+        input_rels
+            .chain(init_rels)
             .chain(init_indices)
-            .chain(load_inputs)
             .collect::<proc_macro2::TokenStream>()
     };
 
@@ -785,27 +811,33 @@ fn make_stratum(
 
     let empty_cond: proc_macro2::TokenStream = current_rels
         .iter()
-        .map(|rel| {
+        .filter_map(|rel| {
+            if rel.relation_type() == Ok(RelationType::Input) {
+                return None;
+            }
             let lower = to_lowercase(&rel.name);
             let rel_update = format_ident!("__{}_update", lower);
-            quote! {
+            Some(quote! {
                 #rel_update.is_empty() &&
-            }
+            })
         })
         .chain(std::iter::once(quote! {true}))
         .collect();
 
     let new_decls: proc_macro2::TokenStream = current_rels
         .iter()
-        .map(|rel| {
-            let rel_ty = relation_type(&rel);
+        .filter_map(|rel| {
+            if rel.relation_type() == Ok(RelationType::Input) {
+                return None;
+            }
+            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
             let lower = to_lowercase(&rel.name);
             let rel_new = format_ident!("__{}_new", lower);
 
-            quote! {
+            Some(quote! {
                 let mut #rel_new: ::std::collections::HashSet<#rel_ty> =
                     ::std::collections::HashSet::new();
-            }
+            })
         })
         .collect();
 
@@ -818,13 +850,17 @@ fn make_stratum(
 
     let set_update_to_new: proc_macro2::TokenStream = current_rels
         .iter()
-        .map(|rel| {
+        .filter_map(|rel| {
+            if rel.relation_type() == Ok(RelationType::Input) {
+                return None;
+            }
+
             let lower = to_lowercase(&rel.name);
             let rel_update = format_ident!("__{}_update", lower);
             let rel_new = format_ident!("__{}_new", lower);
-            quote! {
+            Some(quote! {
                 #rel_update = #rel_new;
-            }
+            })
         })
         .collect();
 
@@ -848,22 +884,32 @@ fn make_updates(
     stratum: &[Ident],
     indices: &HashSet<Index>,
 ) -> proc_macro2::TokenStream {
-    let rel_updates = stratum.iter().map(|name| {
+    let rel_updates = stratum.iter().filter_map(|name| {
+        if context.is_input_relation(name) {
+            return None;
+        }
+
         let lower = to_lowercase(name);
         let rel = format_ident!("__{}", lower);
         let rel_update = format_ident!("__{}_update", lower);
-        quote! {
+        Some(quote! {
             #rel.extend(&#rel_update);
-        }
+        })
     });
     let index_updates = indices.iter().filter_map(|index| {
         if !stratum.contains(&index.name) {
             return None;
         }
+
         let rel = context
             .get_relation(&index.name.to_string())
             .expect("index relation should be found in context");
-        let rel_ty = relation_type(&rel);
+
+        if rel.relation_type() == Ok(RelationType::Input) {
+            return None;
+        }
+
+        let rel_ty = relation_type(&rel, LifetimeUsage::Local);
         let rel_update = format_ident!("__{}_update", to_lowercase(&rel.name));
 
         let index_name = index.to_ident();
@@ -874,15 +920,16 @@ fn make_updates(
             let mut #index_name_update:
                 ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_ty>> =
                 ::std::collections::HashMap::new();
-            for &__crepe_var in #rel_update.iter() {
+            for ref __crepe_var_ref in #rel_update.iter() {
+                let __crepe_var = *__crepe_var_ref;
                 #index_name
                     .entry((#(__crepe_var.#bound_pos,)*))
                     .or_default()
-                    .push(__crepe_var);
+                    .push(*__crepe_var);
                 #index_name_update
                     .entry((#(__crepe_var.#bound_pos,)*))
                     .or_default()
-                    .push(__crepe_var);
+                    .push(*__crepe_var);
             }
         })
     });
@@ -969,10 +1016,12 @@ fn make_clause(
             if fact.negate.is_some() {
                 // Special case: stratified negation, needs to be handled separately
                 assert!(!only_update);
-                let to_mode = |f: &Option<_>| {
-                    f.as_ref()
-                        .map(|_| IndexMode::Bound)
-                        .unwrap_or(IndexMode::Free)
+                let to_mode = |f: &FactField| match f {
+                    FactField::Ignored(_) => IndexMode::Free,
+                    FactField::Ref(_, ident) => {
+                        abort!(ident, "Unable to bind values in negated clause")
+                    }
+                    FactField::Expr(_) => IndexMode::Bound,
                 };
                 let index = Index {
                     name: name.clone(),
@@ -980,7 +1029,12 @@ fn make_clause(
                 };
                 let index_name = index.to_ident();
                 indices.insert(index);
-                let bound_fields: Vec<_> = fact.fields.iter().flatten().cloned().collect();
+                let bound_fields: Vec<_> = fact
+                    .fields
+                    .iter()
+                    .filter(|t| matches!(t, FactField::Expr(_)))
+                    .cloned()
+                    .collect();
                 return Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
                         if !#index_name.contains_key(&(#(#bound_fields,)*)) {
@@ -993,21 +1047,31 @@ fn make_clause(
             let mut index_mode = Vec::new();
             for (i, field) in fact.fields.iter().enumerate() {
                 let idx = syn::Index::from(i);
-                if field.is_none() {
-                    index_mode.push(IndexMode::Free);
-                } else if let Some(var) = is_datalog_var(field.as_ref().unwrap()) {
-                    let var_name = var.to_string();
-                    if datalog_vars.contains(&var_name) {
-                        index_mode.push(IndexMode::Bound);
-                    } else {
+                match field {
+                    FactField::Ignored(_) => index_mode.push(IndexMode::Free),
+                    FactField::Ref(_, ident) => {
                         index_mode.push(IndexMode::Free);
-                        datalog_vars.insert(var_name);
+                        datalog_vars.insert(ident.to_string());
                         setters.push(quote! {
-                            let #field = __crepe_var.#idx;
+                            let #ident = &__crepe_var_ref.#idx;
                         });
                     }
-                } else {
-                    index_mode.push(IndexMode::Bound);
+                    FactField::Expr(expr) => {
+                        if let Some(var) = is_datalog_var(expr) {
+                            let var_name = var.to_string();
+                            if datalog_vars.contains(&var_name) {
+                                index_mode.push(IndexMode::Bound);
+                            } else {
+                                index_mode.push(IndexMode::Free);
+                                datalog_vars.insert(var_name);
+                                setters.push(quote! {
+                                    let #field = __crepe_var.#idx;
+                                });
+                            }
+                        } else {
+                            index_mode.push(IndexMode::Bound);
+                        }
+                    }
                 }
             }
             let setters: proc_macro2::TokenStream = setters.into_iter().collect();
@@ -1020,7 +1084,8 @@ fn make_clause(
                 // If no fields are bound, we don't need an index
                 Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
-                        for &__crepe_var in #rel.iter() {
+                        for ref __crepe_var_ref in #rel.iter() {
+                            let __crepe_var = *__crepe_var_ref;
                             #setters
                             #body
                         }
@@ -1048,7 +1113,8 @@ fn make_clause(
                 Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
                         if let Some(__crepe_iter) = #index_name.get(&(#(#bound_fields,)*)) {
-                            for &__crepe_var in __crepe_iter.iter() {
+                            for ref __crepe_var_ref in __crepe_iter.iter() {
+                                let __crepe_var = *__crepe_var_ref;
                                 #setters
                                 #body
                             }
@@ -1139,13 +1205,26 @@ fn lifetime(needs_lifetime: bool) -> proc_macro2::TokenStream {
     }
 }
 
+enum LifetimeUsage {
+    Item,
+    Local,
+}
+
 /// Returns the type of a relation, with lifetimes set to 'a
-fn relation_type(rel: &Relation) -> proc_macro2::TokenStream {
+fn relation_type(rel: &Relation, usage: LifetimeUsage) -> proc_macro2::TokenStream {
+    let symbol = match rel.relation_type().unwrap() {
+        RelationType::Input | RelationType::Output => "'a",
+        RelationType::Intermediate => match usage {
+            LifetimeUsage::Item => "'a",
+            LifetimeUsage::Local => "'_",
+        },
+    };
+
     let name = &rel.name;
     let lifetimes = rel
         .generics
         .lifetimes()
-        .map(|l| Lifetime::new("'a", l.span()))
+        .map(|l| Lifetime::new(symbol, l.span()))
         .collect::<Vec<_>>();
     quote! { #name<#(#lifetimes),*> }
 }

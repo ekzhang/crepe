@@ -1,5 +1,6 @@
 //! Parsing logic
 
+use quote::ToTokens;
 use syn::punctuated::Punctuated;
 use syn::{
     parenthesized, token, Attribute, Expr, ExprLet, Generics, Ident, Result, Token, Visibility,
@@ -35,6 +36,13 @@ impl Parse for Program {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelationType {
+    Input,
+    Intermediate,
+    Output,
+}
+
 #[derive(Clone)]
 pub struct Relation {
     pub attribute: Option<Ident>,
@@ -46,6 +54,22 @@ pub struct Relation {
     pub paren_token: token::Paren,
     pub fields: Punctuated<Field, Token![,]>,
     pub semi_token: Token![;],
+}
+
+impl Relation {
+    pub fn relation_type(&self) -> std::result::Result<RelationType, &Ident> {
+        if let Some(attr) = &self.attribute {
+            if attr == "input" {
+                Ok(RelationType::Input)
+            } else if attr == "output" {
+                Ok(RelationType::Output)
+            } else {
+                Err(attr)
+            }
+        } else {
+            Ok(RelationType::Intermediate)
+        }
+    }
 }
 
 impl Parse for Relation {
@@ -137,7 +161,7 @@ pub struct Fact {
     pub negate: Option<Token![!]>,
     pub relation: Ident,
     pub paren_token: token::Paren,
-    pub fields: Punctuated<Option<Expr>, Token![,]>,
+    pub fields: Punctuated<FactField, Token![,]>,
 }
 
 impl Parse for Fact {
@@ -150,12 +174,32 @@ impl Parse for Fact {
             paren_token: parenthesized!(content in input),
             fields: content.parse_terminated(|input| {
                 if input.peek(Token![_]) {
-                    let _: Token![_] = input.parse()?;
-                    Ok(None)
+                    Ok(FactField::Ignored(input.parse()?))
+                } else if input.peek(Token![ref]) {
+                    let ref_tok: Token![ref] = input.parse()?;
+                    let ident: Ident = input.parse()?;
+                    Ok(FactField::Ref(ref_tok, ident))
                 } else {
-                    input.parse().map(Some)
+                    Ok(FactField::Expr(input.parse()?))
                 }
             })?,
         })
+    }
+}
+
+#[derive(Clone)]
+pub enum FactField {
+    Ignored(syn::Token![_]),
+    Ref(syn::Token![ref], syn::Ident),
+    Expr(Box<syn::Expr>),
+}
+
+impl ToTokens for FactField {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            FactField::Ignored(t) => tokens.extend(quote::quote! { #t }),
+            FactField::Ref(ref_tok, ident) => tokens.extend(quote::quote! { #ref_tok #ident }),
+            FactField::Expr(expr) => tokens.extend(quote::quote! { #expr }),
+        }
     }
 }
