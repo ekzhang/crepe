@@ -126,6 +126,9 @@ closure for large graphs (~1000 nodes) run at comparable speed to compiled
 [Souffle](https://souffle-lang.github.io/), and at a fraction of the
 compilation time.
 
+For benchmarks, see the [`benches/` directory](benches/).
+The benchmarks can be run using `cargo bench`.
+
 This macro generates a `Crepe` struct in the current module, as well as structs
 for all of the declared relations. This means that to integrate Crepe inside a
 larger program, you should put it in its own module with related code. See the
