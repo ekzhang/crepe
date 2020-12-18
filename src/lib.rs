@@ -303,7 +303,10 @@ impl Context {
 
             for r in rels_intermediate.values() {
                 if r.generics.lifetimes().next().is_some() {
-                    emit_error!(r.generics, "Lifetime on intermediate relation without any input relations having a lifetime");
+                    emit_error!(
+                        r.generics,
+                        "Lifetime on intermediate relation without any input relations having a lifetime"
+                    );
                 }
             }
         }
@@ -528,18 +531,12 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         .rels_input
         .values()
         .map(|relation| {
-            let name = &relation.name;
-
             // because the generics have been validated to only contain lifetimes
             // no further checking is done here.
-            let lifetimes = relation
-                .generics
-                .lifetimes()
-                .map(|l| Lifetime::new("'a", l.span()));
-
-            let lowercase_name = to_lowercase(name);
+            let rel_ty = relation_type(&relation);
+            let lowercase_name = to_lowercase(&relation.name);
             quote! {
-                #lowercase_name: ::std::vec::Vec<#name<#(#lifetimes),*>>,
+                #lowercase_name: ::std::vec::Vec<#rel_ty>,
             }
         })
         .collect();
@@ -576,30 +573,22 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
         .rels_input
         .values()
         .map(|relation| {
-            let name = &relation.name;
-
-            let lifetimes = relation
-                .generics
-                .lifetimes()
-                .map(|l| Lifetime::new("'a", l.span()))
-                .collect::<Vec<_>>();
-
+            let rel_ty = relation_type(&relation);
             let lifetime = lifetime(context.has_lifetime);
-
-            let lower = to_lowercase(name);
+            let lower = to_lowercase(&relation.name);
             quote! {
-                impl #lifetime ::core::iter::Extend<#name<#(#lifetimes),*>> for Crepe #lifetime {
+                impl #lifetime ::core::iter::Extend<#rel_ty> for Crepe #lifetime {
                     fn extend<T>(&mut self, iter: T)
                     where
-                        T: ::core::iter::IntoIterator<Item = #name<#(#lifetimes),*>>,
+                        T: ::core::iter::IntoIterator<Item = #rel_ty>,
                     {
                         self.#lower.extend(iter);
                     }
                 }
-                impl<'a> ::core::iter::Extend<&'a #name<#(#lifetimes),*>> for Crepe #lifetime {
+                impl<'a> ::core::iter::Extend<&'a #rel_ty> for Crepe #lifetime {
                     fn extend<T>(&mut self, iter: T)
                     where
-                        T: ::core::iter::IntoIterator<Item = &'a #name<#(#lifetimes),*>>,
+                        T: ::core::iter::IntoIterator<Item = &'a #rel_ty>,
                     {
                         self.extend(iter.into_iter().copied());
                     }
@@ -692,21 +681,15 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
 
     let initialize = {
         let init_rels = context.all_relations().map(|rel| {
-            let name = &rel.name;
-            let lower = to_lowercase(name);
+            let rel_ty = relation_type(&rel);
+            let lower = to_lowercase(&rel.name);
             let var = format_ident!("__{}", lower);
             let var_update = format_ident!("__{}_update", lower);
 
-            let lifetimes = rel
-                .generics
-                .lifetimes()
-                .map(|l| Lifetime::new("'a", l.span()))
-                .collect::<Vec<_>>();
-
             quote! {
-                let mut #var: ::std::collections::HashSet<#name<#(#lifetimes),*>> =
+                let mut #var: ::std::collections::HashSet<#rel_ty> =
                     ::std::collections::HashSet::new();
-                let mut #var_update: ::std::collections::HashSet<#name<#(#lifetimes),*>> =
+                let mut #var_update: ::std::collections::HashSet<#rel_ty> =
                     ::std::collections::HashSet::new();
             }
         });
@@ -714,18 +697,13 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let rel = context
                 .get_relation(&index.name.to_string())
                 .expect("index relation should be found in context");
-            let rel_name = &rel.name;
+            let rel_ty = relation_type(&rel);
             let index_name = index.to_ident();
             let key_type = index.key_type(context);
-            let lifetimes = rel
-                .generics
-                .lifetimes()
-                .map(|l| Lifetime::new("'a", l.span()))
-                .collect::<Vec<_>>();
 
             quote! {
                 let mut #index_name:
-                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name<#(#lifetimes),*>>> =
+                    ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_ty>> =
                     ::std::collections::HashMap::new();
             }
         });
@@ -792,18 +770,12 @@ fn make_stratum(
     let new_decls: proc_macro2::TokenStream = current_rels
         .iter()
         .map(|rel| {
-            let name = &rel.name;
-            let lower = to_lowercase(name);
+            let rel_ty = relation_type(&rel);
+            let lower = to_lowercase(&rel.name);
             let rel_new = format_ident!("__{}_new", lower);
 
-            let lifetimes = rel
-                .generics
-                .lifetimes()
-                .map(|l| Lifetime::new("'a", l.span()))
-                .collect::<Vec<_>>();
-
             quote! {
-                let mut #rel_new: ::std::collections::HashSet<#name<#(#lifetimes),*>> =
+                let mut #rel_new: ::std::collections::HashSet<#rel_ty> =
                     ::std::collections::HashSet::new();
             }
         })
@@ -863,13 +835,8 @@ fn make_updates(
         let rel = context
             .get_relation(&index.name.to_string())
             .expect("index relation should be found in context");
-        let rel_name = &rel.name;
-        let rel_update = format_ident!("__{}_update", to_lowercase(rel_name));
-        let lifetimes = rel
-            .generics
-            .lifetimes()
-            .map(|l| Lifetime::new("'a", l.span()))
-            .collect::<Vec<_>>();
+        let rel_ty = relation_type(&rel);
+        let rel_update = format_ident!("__{}_update", to_lowercase(&rel.name));
 
         let index_name = index.to_ident();
         let index_name_update = format_ident!("{}_update", index_name);
@@ -877,7 +844,7 @@ fn make_updates(
         let bound_pos = index.bound_pos();
         Some(quote! {
             let mut #index_name_update:
-                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_name<#(#lifetimes),*>>> =
+                ::std::collections::HashMap<(#(#key_type,)*), ::std::vec::Vec<#rel_ty>> =
                 ::std::collections::HashMap::new();
             for &__crepe_var in #rel_update.iter() {
                 #index_name
@@ -1142,4 +1109,15 @@ fn lifetime(needs_lifetime: bool) -> proc_macro2::TokenStream {
     } else {
         quote! {}
     }
+}
+
+/// Returns the type of a relation, with lifetimes set to 'a
+fn relation_type(rel: &Relation) -> proc_macro2::TokenStream {
+    let name = &rel.name;
+    let lifetimes = rel
+        .generics
+        .lifetimes()
+        .map(|l| Lifetime::new("'a", l.span()))
+        .collect::<Vec<_>>();
+    quote! { #name<#(#lifetimes),*> }
 }
