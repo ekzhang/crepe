@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.4 - 2021-01-10
 
 - Add support for lifetimes in relations and the `ref` keyword (#9)
 - Add benchmarks and support for custom hashers (#9)
