@@ -33,7 +33,8 @@ crepe! {
         Input(y);
 }
 
-fn main() {
+#[test]
+fn test_let_bindings() {
     let mut rt = Crepe::new();
     rt.extend(&[Input(2), Input(3), Input(4)]);
     let (res,) = rt.run();
