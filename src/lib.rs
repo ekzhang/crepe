@@ -19,7 +19,7 @@ use proc_macro_error::{abort, emit_error, proc_macro_error};
 use quote::{format_ident, quote, quote_spanned};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter};
-use syn::{parse_macro_input, spanned::Spanned, Expr, Ident, Lifetime, Type};
+use syn::{parse_macro_input, spanned::Spanned, Expr, Ident, Lifetime, Pat, Type};
 
 use parse::{Clause, Fact, FactField, Program, Relation, RelationType, Rule};
 use strata::Strata;
@@ -1082,6 +1082,7 @@ fn make_clause(
         }
         Clause::Let(guard) => {
             assert!(!only_update);
+            pat_datalog_vars(&guard.pat, datalog_vars);
             Box::new(move |body| {
                 quote! {
                     #[allow(irrefutable_let_patterns)]
@@ -1135,6 +1136,51 @@ fn is_datalog_var(expr: &Expr) -> Option<Ident> {
             None
         }
         _ => None,
+    }
+}
+
+/// Visits a pattern in `ExprLet` position, returning all Datalog variables that
+/// are bound by that pattern.
+fn pat_datalog_vars(pat: &Pat, datalog_vars: &mut HashSet<String>) {
+    match pat {
+        Pat::Box(pb) => pat_datalog_vars(&pb.pat, datalog_vars),
+        Pat::Ident(pi) => {
+            datalog_vars.insert(pi.ident.to_string());
+            if let Some((_, ref p)) = pi.subpat {
+                pat_datalog_vars(p, datalog_vars);
+            }
+        }
+        Pat::Lit(_) => (),
+        Pat::Macro(pm) => abort!(pm.span(), "Macros not allowed in let bindings."),
+        Pat::Or(_) => (),
+        Pat::Path(_) => (),
+        Pat::Range(_) => (),
+        Pat::Reference(pr) => pat_datalog_vars(&pr.pat, datalog_vars),
+        Pat::Rest(_) => (),
+        Pat::Slice(ps) => {
+            for e in &ps.elems {
+                pat_datalog_vars(e, datalog_vars);
+            }
+        }
+        Pat::Struct(ps) => {
+            for field_pat in &ps.fields {
+                pat_datalog_vars(&field_pat.pat, datalog_vars);
+            }
+        }
+        Pat::Tuple(pt) => {
+            for e in &pt.elems {
+                pat_datalog_vars(e, datalog_vars);
+            }
+        }
+        Pat::TupleStruct(pts) => {
+            for e in &pts.pat.elems {
+                pat_datalog_vars(e, datalog_vars);
+            }
+        }
+        Pat::Type(pt) => pat_datalog_vars(&pt.pat, datalog_vars),
+        Pat::Verbatim(pv) => abort!(pv.span(), "Cannot parse verbatim pattern."),
+        Pat::Wild(_) => (),
+        _ => abort!(pat.span(), "Unsupported pattern type."),
     }
 }
 
