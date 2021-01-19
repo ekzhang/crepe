@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 - 2021-01-19
+
+- Bugfix: register Datalog variables bound in `let` patterns (#14)
+
 ## 0.1.4 - 2021-01-10
 
 - Add support for lifetimes in relations and the `ref` keyword (#9)
