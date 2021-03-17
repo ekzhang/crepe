@@ -122,8 +122,8 @@ NoWalk: 8207
 ## Notes
 
 From initial testing, the generated code is very fast. Variants of transitive
-closure for large graphs (~1000 nodes) run at comparable speed to compiled
-[Souffle](https://souffle-lang.github.io/), and at a fraction of the
+closure for large graphs (~10<sup>6</sup> relations) run at comparable speed to
+compiled [Souffle](https://souffle-lang.github.io/), and use a fraction of the
 compilation time.
 
 For benchmarks, see the [`benches/` directory](benches/).
