@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 - 2022-02-22
+
+- Implement support for iteration through `for` clauses in rules
+
 ## 0.1.5 - 2021-01-19
 
 - Bugfix: register Datalog variables bound in `let` patterns (#14)
