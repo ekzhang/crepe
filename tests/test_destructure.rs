@@ -57,8 +57,8 @@ fn test_destructure() {
         .map(|ProgramInteger(x)| x)
         .collect();
 
-    strs.sort();
+    strs.sort_unstable();
     assert_eq!(strs, vec!["hello", "world"]);
-    ints.sort();
+    ints.sort_unstable();
     assert_eq!(ints, vec![-2, 10, 42, 1200]);
 }

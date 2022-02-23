@@ -419,7 +419,7 @@ impl Context {
             }
             rule.clauses.iter().for_each(|clause| {
                 if let Clause::Fact(fact) = clause {
-                    check(&fact);
+                    check(fact);
                     dependencies.insert((&rule.goal.relation, &fact.relation));
                 }
             });
@@ -572,7 +572,7 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         .map(|relation| {
             // because the generics have been validated to only contain lifetimes
             // no further checking is done here.
-            let rel_ty = relation_type(&relation, LifetimeUsage::Item);
+            let rel_ty = relation_type(relation, LifetimeUsage::Item);
             let lowercase_name = to_lowercase(&relation.name);
             quote! {
                 #lowercase_name: ::std::vec::Vec<#rel_ty>,
@@ -591,8 +591,8 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
 }
 
 fn make_runtime_impl(context: &Context) -> proc_macro2::TokenStream {
-    let builders = make_extend(&context);
-    let run = make_run(&context);
+    let builders = make_extend(context);
+    let run = make_run(context);
 
     let lifetime = lifetime(context.has_input_lifetime);
 
@@ -612,7 +612,7 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
         .rels_input
         .values()
         .map(|relation| {
-            let rel_ty = relation_type(&relation, LifetimeUsage::Item);
+            let rel_ty = relation_type(relation, LifetimeUsage::Item);
             let lifetime = lifetime(context.has_input_lifetime);
             let lower = to_lowercase(&relation.name);
             quote! {
@@ -734,7 +734,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
 
     let initialize = {
         let init_rels = context.all_relations().map(|rel| {
-            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
+            let rel_ty = relation_type(rel, LifetimeUsage::Local);
             let lower = to_lowercase(&rel.name);
             let var = format_ident!("__{}", lower);
             let var_update = format_ident!("__{}_update", lower);
@@ -750,7 +750,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             let rel = context
                 .get_relation(&index.name.to_string())
                 .expect("index relation should be found in context");
-            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
+            let rel_ty = relation_type(rel, LifetimeUsage::Local);
             let index_name = index.to_ident();
             let key_type = index.key_type(context);
 
@@ -783,8 +783,8 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
         }
     };
 
-    let output_ty_hasher = make_output_ty(&context, quote! { CrepeHasher });
-    let output_ty_default = make_output_ty(&context, quote! {});
+    let output_ty_hasher = make_output_ty(context, quote! { CrepeHasher });
+    let output_ty_default = make_output_ty(context, quote! {});
     quote! {
         fn run_with_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
             self
@@ -830,7 +830,7 @@ fn make_stratum(
     let new_decls: proc_macro2::TokenStream = current_rels
         .iter()
         .map(|rel| {
-            let rel_ty = relation_type(&rel, LifetimeUsage::Local);
+            let rel_ty = relation_type(rel, LifetimeUsage::Local);
             let lower = to_lowercase(&rel.name);
             let rel_new = format_ident!("__{}_new", lower);
             quote! {
@@ -896,7 +896,7 @@ fn make_updates(
             .get_relation(&index.name.to_string())
             .expect("index relation should be found in context");
 
-        let rel_ty = relation_type(&rel, LifetimeUsage::Local);
+        let rel_ty = relation_type(rel, LifetimeUsage::Local);
         let rel_update = format_ident!("__{}_update", to_lowercase(&rel.name));
 
         let index_name = index.to_ident();
@@ -959,6 +959,7 @@ fn make_rule(
     if fact_positions.is_empty() {
         // Will not change, so we only need to evaluate it once
         let mut datalog_vars: HashSet<String> = HashSet::new();
+        #[allow(clippy::needless_collect)]
         let fragments: Vec<_> = rule
             .clauses
             .iter()
@@ -976,6 +977,7 @@ fn make_rule(
         let mut variants = Vec::new();
         for update_position in fact_positions {
             let mut datalog_vars: HashSet<String> = HashSet::new();
+            #[allow(clippy::needless_collect)]
             let fragments: Vec<_> = rule
                 .clauses
                 .iter()
@@ -1142,7 +1144,7 @@ fn make_clause(
 fn make_output_ty(context: &Context, hasher: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     let fields = context.output_order.iter().map(|name| {
         let rel = context.rels_output.get(&name.to_string()).unwrap();
-        relation_type(&rel, LifetimeUsage::Item)
+        relation_type(rel, LifetimeUsage::Item)
     });
 
     quote! {
