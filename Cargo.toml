@@ -24,7 +24,7 @@ harness = false
 
 
 [dev-dependencies]
-trybuild = "1.0"
+trybuild = "1.0.56"
 criterion = "0.3"
 fnv = "1.0"
 
