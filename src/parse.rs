@@ -4,8 +4,8 @@ use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
-    parenthesized, parse_quote, token, Attribute, Expr, ExprLet, Field, Generics, Ident, Result,
-    Token, Visibility,
+    parenthesized, parse_quote, token, Attribute, Expr, ExprLet, Field, Generics, Ident, Pat,
+    Result, Token, Visibility,
 };
 
 #[derive(Clone)]
@@ -137,6 +137,7 @@ pub enum Clause {
     Fact(Fact),
     Expr(Expr),
     Let(ExprLet),
+    For(For),
 }
 
 impl Parse for Clause {
@@ -146,6 +147,8 @@ impl Parse for Clause {
             input.parse().map(Clause::Expr)
         } else if lookahead.peek(Token![let]) {
             input.parse().map(Clause::Let)
+        } else if lookahead.peek(Token![for]) {
+            input.parse().map(Clause::For)
         } else if lookahead.peek(Ident) || lookahead.peek(Token![!]) {
             input.parse().map(Clause::Fact)
         } else {
@@ -181,6 +184,26 @@ impl Parse for Fact {
                     Ok(FactField::Expr(input.parse()?))
                 }
             })?,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct For {
+    pub for_token: Token![for],
+    pub pat: Pat,
+    pub in_token: Token![in],
+    pub expr: Expr,
+}
+
+impl Parse for For {
+    fn parse(input: ParseStream) -> Result<Self> {
+        #[allow(clippy::eval_order_dependence)]
+        Ok(Self {
+            for_token: input.parse()?,
+            pat: input.parse()?,
+            in_token: input.parse()?,
+            expr: input.parse()?,
         })
     }
 }

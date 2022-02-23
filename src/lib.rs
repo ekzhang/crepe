@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display, Formatter};
 use syn::{parse_macro_input, spanned::Spanned, Expr, Ident, Lifetime, Pat, Type};
 
-use parse::{Clause, Fact, FactField, Program, Relation, RelationType, Rule};
+use parse::{Clause, Fact, FactField, For, Program, Relation, RelationType, Rule};
 use strata::Strata;
 
 /// The main macro, which lets you write a Datalog program declaratively.
@@ -149,6 +149,44 @@ use strata::Strata;
 /// We also support let-bindings in rules, including bindings that destructure
 /// their arguments conditionally. See `tests/test_destructure.rs` for an
 /// example of this.
+/// ```
+/// # use crepe::crepe;
+/// crepe! {
+///     @input
+///     struct Value<'a>(&'a str);
+///
+///     @output
+/// #   #[derive(Debug)]
+///     struct Squared(i32, i32);
+///
+///     Squared(n, x) <-
+///         Value(string),
+///         let Ok(n) = string.parse(),
+///         let x = n * n;
+/// }
+/// # fn main() {
+/// #     let mut rt = Crepe::new();
+/// #     rt.extend([Value("hello"), Value("42")]);
+/// #     let (squared,) = rt.run();
+/// #     assert_eq!(squared.into_iter().collect::<Vec<_>>(), [Squared(42, 1764)]);
+/// # }
+/// ```
+/// The last built-in control flow feature is iteration over data. Rules can
+/// enumerate values from an iterator, allowing them to use data from outside of
+/// Crepe without having to convert functions to use work-arounds. For example,
+/// to access the characters of a string, you could write:
+/// ```
+/// # use crepe::crepe;
+/// crepe! {
+///     @input
+///     struct Name<'a>(&'a str);
+///
+///     @output
+///     struct NameContainsLetter<'a>(&'a str, char);
+///
+///     NameContainsLetter(name, letter) <- Name(name), for letter in name.chars();
+/// }
+/// ```
 ///
 /// # Evaluation Mode
 /// All generated code uses semi-naive evaluation (see Chapter 3 of _Datalog
@@ -1087,6 +1125,14 @@ fn make_clause(
                 quote! {
                     #[allow(irrefutable_let_patterns)]
                     if #guard { #body }
+                }
+            })
+        }
+        Clause::For(For { pat, expr, .. }) => {
+            assert!(!only_update);
+            Box::new(move |body| {
+                quote! {
+                    for #pat in #expr { #body }
                 }
             })
         }
