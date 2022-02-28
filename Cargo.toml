@@ -15,13 +15,16 @@ proc-macro = true
 bench = false
 
 [[bench]]
+name = "collatz"
+harness = false
+
+[[bench]]
 name = "graph_walking"
 harness = false
 
 [[bench]]
 name = "fibonacci"
 harness = false
-
 
 [dev-dependencies]
 trybuild = "1.0.56"
