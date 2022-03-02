@@ -50,4 +50,4 @@ jobs:
           toolchain: stable
           components: clippy
 
-      - run: cargo clippy --all-targets
+      - run: cargo clippy --all-targets -- -D warnings
