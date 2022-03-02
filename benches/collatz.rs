@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use crepe::crepe;
 
@@ -25,13 +25,12 @@ fn collatz_length(n: u128) -> usize {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function_over_inputs(
-        "collatz",
-        |b, n| {
-            b.iter(|| collatz_length(black_box(*n)));
-        },
-        vec![9, 77_031, 9_780_657_630],
-    );
+    let mut group = c.benchmark_group("collatz");
+    for n in [9, 77_031, 9_780_657_630] {
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
+            b.iter(|| collatz_length(black_box(n)));
+        });
+    }
 }
 
 criterion_group!(benches, criterion_benchmark);

@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use crepe::crepe;
 
@@ -28,13 +28,12 @@ fn fibonacci_length(n: u128) -> usize {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function_over_inputs(
-        "fibonacci",
-        |b, n| {
-            b.iter(|| fibonacci_length(black_box(*n)));
-        },
-        vec![50, 100, 150],
-    );
+    let mut group = c.benchmark_group("fibonacci");
+    for n in [50, 100, 150] {
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
+            b.iter(|| fibonacci_length(black_box(n)));
+        });
+    }
 }
 
 criterion_group!(benches, criterion_benchmark);

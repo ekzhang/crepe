@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 use crepe::crepe;
 
@@ -46,13 +46,12 @@ fn walk(n: usize) -> (usize, usize) {
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function_over_inputs(
-        "walk",
-        |b, input| {
-            b.iter(|| walk(black_box(*input)));
-        },
-        vec![128, 256, 512],
-    );
+    let mut group = c.benchmark_group("walk");
+    for n in [128, 256, 512] {
+        group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
+            b.iter(|| walk(black_box(n)));
+        });
+    }
 }
 
 criterion_group!(benches, criterion_benchmark);
