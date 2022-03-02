@@ -6,15 +6,12 @@ crepe! {
     @input
     struct Start(u128);
 
-    struct Intermediate(u128, u128);
-
     @output
     struct Col(u128);
 
-    Intermediate(0, n) <- Start(n);
-    Intermediate(n + 1, if x % 2 == 0 { x / 2 } else { 3 * x + 1 }) <- Intermediate(n, x), (x != 1);
-
-    Col(n) <- Intermediate(n, x), (x != 1);
+    Col(x) <- Start(x);
+    Col(x / 2) <- Col(x), (x % 2 == 0);
+    Col(3 * x + 1) <- Col(x), (x % 2 != 0), (x != 1);
 }
 
 // Return the stopping time for the given starting number.
@@ -24,7 +21,7 @@ fn collatz_length(n: u128) -> usize {
     rt.extend(&[Start(n)]);
 
     let (cols,) = rt.run_with_hasher::<fnv::FnvBuildHasher>();
-    cols.len()
+    cols.len() - 1
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
