@@ -36,7 +36,7 @@ crepe! {
 #[test]
 fn test_let_bindings() {
     let mut rt = Crepe::new();
-    rt.extend(&[Input(2), Input(3), Input(4)]);
+    rt.extend([Input(2), Input(3), Input(4)]);
     let (res,) = rt.run();
     let res: Vec<_> = res.into_iter().collect();
     assert_eq!(res, vec![Output(2)]);

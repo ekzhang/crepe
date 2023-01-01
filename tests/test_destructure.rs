@@ -37,7 +37,7 @@ crepe! {
 #[test]
 fn test_destructure() {
     let mut runtime = Crepe::new();
-    runtime.extend(&[
+    runtime.extend([
         ProgramToken(Token::String("hello")),
         ProgramToken(Token::String("world")),
         ProgramToken(Token::Integer(42)),

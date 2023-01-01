@@ -18,7 +18,7 @@ crepe! {
 fn collatz_length(n: u128) -> usize {
     let mut rt = Crepe::new();
 
-    rt.extend(&[Start(n)]);
+    rt.extend([Start(n)]);
 
     let (cols,) = rt.run_with_hasher::<fnv::FnvBuildHasher>();
     cols.len() - 1

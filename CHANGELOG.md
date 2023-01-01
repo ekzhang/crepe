@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7 - 2023-01-01
+
+- Change library and examples to use Rust 2021 array `IntoIterator` impls
+- Update petgraph dependency to v0.6
+
 ## 0.1.6 - 2022-02-22
 
 - Implement support for iteration through `for` clauses in rules

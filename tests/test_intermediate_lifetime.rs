@@ -22,7 +22,7 @@ crepe! {
 #[test]
 fn test_intermediate_lifetime() {
     let mut rt = Crepe::new();
-    rt.extend(&[Input([0, 1, 2, 3]), Input([1, 2, 3, 4])]);
+    rt.extend([Input([0, 1, 2, 3]), Input([1, 2, 3, 4])]);
     let (res,) = rt.run();
     let mut res = res.into_iter().map(|Output(n)| n).collect::<Vec<_>>();
     res.sort_unstable();
