@@ -19,7 +19,7 @@ crepe! {
 #[test]
 fn test_ref_overwrite() {
     let mut rt = Crepe::new();
-    rt.extend(&[Input(2), Input(3)]);
+    rt.extend([Input(2), Input(3)]);
     let (res,) = rt.run();
     let mut res: Vec<_> = res.into_iter().collect();
     res.sort_unstable();

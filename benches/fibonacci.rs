@@ -21,7 +21,7 @@ crepe! {
 fn fibonacci_length(n: u128) -> usize {
     let mut rt = Crepe::new();
 
-    rt.extend(&[Depth(n)]);
+    rt.extend([Depth(n)]);
 
     let (fibs,) = rt.run_with_hasher::<fnv::FnvBuildHasher>();
     fibs.len()

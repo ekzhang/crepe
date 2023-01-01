@@ -16,7 +16,7 @@ crepe! {
 #[test]
 fn test_disaggregate() {
     let mut rt = Crepe::new();
-    rt.extend(&[Name("al"), Name("bob")]);
+    rt.extend([Name("al"), Name("bob")]);
     let (res,) = rt.run();
     let mut res: Vec<_> = res.into_iter().collect();
     res.sort();

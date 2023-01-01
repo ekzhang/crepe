@@ -252,7 +252,7 @@ use strata::Strata;
 ///
 /// fn main() {
 ///     let mut runtime = Crepe::new();
-///     runtime.extend(&[Word("banana"), Word("bandana")]);
+///     runtime.extend([Word("banana"), Word("bandana")]);
 ///     let (suffixes,) = runtime.run();
 ///     println!("{:?}", suffixes);
 /// }

@@ -79,7 +79,7 @@ impl Parse for Relation {
             None
         };
         let content;
-        #[allow(clippy::eval_order_dependence)]
+        #[allow(clippy::mixed_read_write_in_expression)]
         Ok(Self {
             attribute,
             attrs: input.call(Attribute::parse_outer)?,
@@ -168,7 +168,7 @@ pub struct Fact {
 impl Parse for Fact {
     fn parse(input: ParseStream) -> Result<Self> {
         let content;
-        #[allow(clippy::eval_order_dependence)]
+        #[allow(clippy::mixed_read_write_in_expression)]
         Ok(Self {
             negate: input.parse()?,
             relation: input.parse()?,
@@ -198,7 +198,7 @@ pub struct For {
 
 impl Parse for For {
     fn parse(input: ParseStream) -> Result<Self> {
-        #[allow(clippy::eval_order_dependence)]
+        #[allow(clippy::mixed_read_write_in_expression)]
         Ok(Self {
             for_token: input.parse()?,
             pat: input.parse()?,

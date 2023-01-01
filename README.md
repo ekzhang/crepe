@@ -40,7 +40,7 @@ crepe! {
 
 fn main() {
     let mut runtime = Crepe::new();
-    runtime.extend(&[Edge(1, 2), Edge(2, 3), Edge(3, 4), Edge(2, 5)]);
+    runtime.extend([Edge(1, 2), Edge(2, 3), Edge(3, 4), Edge(2, 5)]);
 
     let (reachable,) = runtime.run();
     for Reachable(x, y) in reachable {
