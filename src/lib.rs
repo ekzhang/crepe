@@ -670,7 +670,7 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///     let mut __crepe_first_iteration = true;
 ///     while __crepe_first_iteration || !(__edge_update.is_empty() && __tc_update.is_empty()) {
 ///         __tc.extend(&__tc_update);
-///         for __crepe_var in __tc_update.iter() {
+///         for __crepe_var in &__tc_update {
 ///             __tc_index_bf
 ///                 .entry((__crepe_var.0,))
 ///                 .or_default()
@@ -680,10 +680,10 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///
 ///         let mut __tc_new: ::std::collections::HashSet<Tc, CrepeHasher> =
 ///             ::std::collections::HashSet::default();
-///         let mut __edge_new: ::std::collections::HashSet<Tc, CrepeHasher> =
+///         let mut __edge_new: ::std::collections::HashSet<Edge, CrepeHasher> =
 ///             ::std::collections::HashSet::default();
 ///
-///         for __crepe_var in __edge.iter() {
+///         for __crepe_var in &__edge {
 ///             let x = __crepe_var.0;
 ///             let y = __crepe_var.1;
 ///             let __crepe_goal = Tc(x, y);
@@ -692,11 +692,11 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
 ///             }
 ///         }
 ///
-///         for __crepe_var in __edge.iter() {
+///         for __crepe_var in &__edge {
 ///             let x = __crepe_var.0;
 ///             let y = __crepe_var.1;
 ///             if let Some(__crepe_iter) = __tc_index_bf.get(&(y,)) {
-///                 for __crepe_var in __crepe_iter.iter() {
+///                 for __crepe_var in __crepe_iter {
 ///                     let z = __crepe_var.1;
 ///                     let __crepe_goal = Tc(x, z);
 ///                     if !__tc.contains(&__crepe_goal) {
@@ -786,6 +786,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     let output_ty_hasher = make_output_ty(context, quote! { CrepeHasher });
     let output_ty_default = make_output_ty(context, quote! {});
     quote! {
+        #[allow(clippy::collapsible_if)]
         fn run_with_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
             self
         ) -> #output_ty_hasher {
@@ -909,7 +910,7 @@ fn make_updates(
                 ::std::vec::Vec<#rel_ty>,
                 CrepeHasher
             > = ::std::collections::HashMap::default();
-            for __crepe_var in #rel_update.iter() {
+            for __crepe_var in &#rel_update {
                 #index_name
                     .entry((#(__crepe_var.#bound_pos,)*))
                     .or_default()
@@ -1074,7 +1075,7 @@ fn make_clause(
                 // If no fields are bound, we don't need an index
                 Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
-                        for __crepe_var in #rel.iter() {
+                        for __crepe_var in &#rel {
                             #setters
                             #body
                         }
@@ -1102,7 +1103,7 @@ fn make_clause(
                 Box::new(move |body| {
                     quote_spanned! {fact.relation.span()=>
                         if let Some(__crepe_iter) = #index_name.get(&(#(#bound_fields,)*)) {
-                            for __crepe_var in __crepe_iter.iter() {
+                            for __crepe_var in __crepe_iter {
                                 #setters
                                 #body
                             }
