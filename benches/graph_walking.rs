@@ -33,7 +33,7 @@ fn walk(n: usize) -> (usize, usize) {
     let mut edges = Vec::new();
     for i in 0..n {
         for j in 0..n {
-            if i + j % 50 < 2 {
+            if (i + j) % 50 < 2 {
                 edges.push(Edge(i, j, 5));
             }
         }
