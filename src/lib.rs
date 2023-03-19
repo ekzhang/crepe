@@ -1192,7 +1192,7 @@ fn is_datalog_var(expr: &Expr) -> Option<Ident> {
 /// are bound by that pattern.
 fn pat_datalog_vars(pat: &Pat, datalog_vars: &mut HashSet<String>) {
     match pat {
-        Pat::Box(pb) => pat_datalog_vars(&pb.pat, datalog_vars),
+        Pat::Const(_) => (),
         Pat::Ident(pi) => {
             datalog_vars.insert(pi.ident.to_string());
             if let Some((_, ref p)) = pi.subpat {
@@ -1202,6 +1202,7 @@ fn pat_datalog_vars(pat: &Pat, datalog_vars: &mut HashSet<String>) {
         Pat::Lit(_) => (),
         Pat::Macro(pm) => abort!(pm.span(), "Macros not allowed in let bindings."),
         Pat::Or(_) => (),
+        Pat::Paren(pp) => pat_datalog_vars(&pp.pat, datalog_vars),
         Pat::Path(_) => (),
         Pat::Range(_) => (),
         Pat::Reference(pr) => pat_datalog_vars(&pr.pat, datalog_vars),
@@ -1222,7 +1223,7 @@ fn pat_datalog_vars(pat: &Pat, datalog_vars: &mut HashSet<String>) {
             }
         }
         Pat::TupleStruct(pts) => {
-            for e in &pts.pat.elems {
+            for e in &pts.elems {
                 pat_datalog_vars(e, datalog_vars);
             }
         }

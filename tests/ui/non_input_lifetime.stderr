@@ -1,5 +1,5 @@
 error: Lifetime on output relation without any input relations having a lifetime
-  --> $DIR/non_input_lifetime.rs:14:22
+  --> tests/ui/non_input_lifetime.rs:14:22
    |
 14 |         struct Output<'a>(&'a u32);
    |                      ^^^^

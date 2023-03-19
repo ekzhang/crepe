@@ -88,7 +88,7 @@ impl Parse for Relation {
             name: input.parse()?,
             generics: input.parse()?,
             paren_token: parenthesized!(content in input),
-            fields: content.parse_terminated(Field::parse_unnamed)?,
+            fields: content.parse_terminated(Field::parse_unnamed, Token![,])?,
             semi_token: input.parse()?,
         })
     }
@@ -173,17 +173,20 @@ impl Parse for Fact {
             negate: input.parse()?,
             relation: input.parse()?,
             paren_token: parenthesized!(content in input),
-            fields: content.parse_terminated(|input| {
-                if input.peek(Token![_]) {
-                    Ok(FactField::Ignored(input.parse()?))
-                } else if input.peek(Token![ref]) {
-                    let ref_tok: Token![ref] = input.parse()?;
-                    let ident: Ident = input.parse()?;
-                    Ok(FactField::Ref(ref_tok, ident))
-                } else {
-                    Ok(FactField::Expr(input.parse()?))
-                }
-            })?,
+            fields: content.parse_terminated(
+                |input| {
+                    if input.peek(Token![_]) {
+                        Ok(FactField::Ignored(input.parse()?))
+                    } else if input.peek(Token![ref]) {
+                        let ref_tok: Token![ref] = input.parse()?;
+                        let ident: Ident = input.parse()?;
+                        Ok(FactField::Ref(ref_tok, ident))
+                    } else {
+                        Ok(FactField::Expr(input.parse()?))
+                    }
+                },
+                Token![,],
+            )?,
         })
     }
 }
@@ -201,7 +204,7 @@ impl Parse for For {
         #[allow(clippy::mixed_read_write_in_expression)]
         Ok(Self {
             for_token: input.parse()?,
-            pat: input.parse()?,
+            pat: Pat::parse_single(input)?,
             in_token: input.parse()?,
             expr: input.parse()?,
         })

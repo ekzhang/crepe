@@ -1,5 +1,5 @@
 error: Relation 'Fib' was declared with arity 2, but constructed with arity 3 here.
-  --> $DIR/invalid_arity.rs:10:9
+  --> tests/ui/invalid_arity.rs:10:9
    |
 10 |         Fib(0, 0, 2);
    |         ^^^
