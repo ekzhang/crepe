@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 - 2023-03-19
+
+- Update syn dependency to v2.0
+
 ## 0.1.7 - 2023-01-01
 
 - Change library and examples to use Rust 2021 array `IntoIterator` impls
