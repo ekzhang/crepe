@@ -638,20 +638,14 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
                 // Already has 'a, need to add '__b
                 let type_params: Vec<_> = collect_generic_params(context)
                     .into_iter()
-                    .map(|tp| {
-                        let ident = &tp.ident;
-                        quote! { #ident: ::std::hash::Hash + ::std::cmp::Eq + ::std::clone::Clone + ::std::marker::Copy + ::std::default::Default }
-                    })
+                    .map(|tp| merge_bounds_with_required(tp))
                     .collect();
                 quote! { <'a, '__b, #(#type_params),*> }
             } else {
                 // No 'a, but might have type params
                 let type_params: Vec<_> = collect_generic_params(context)
                     .into_iter()
-                    .map(|tp| {
-                        let ident = &tp.ident;
-                        quote! { #ident: ::std::hash::Hash + ::std::cmp::Eq + ::std::clone::Clone + ::std::marker::Copy + ::std::default::Default }
-                    })
+                    .map(|tp| merge_bounds_with_required(tp))
                     .collect();
                 if type_params.is_empty() {
                     quote! { <'__b> }
@@ -1310,17 +1304,67 @@ fn collect_generic_params(context: &Context) -> Vec<&syn::TypeParam> {
     params
 }
 
+/// Check if a type parameter has a specific trait bound
+fn has_bound(tp: &syn::TypeParam, bound_name: &str) -> bool {
+    tp.bounds.iter().any(|b| {
+        if let syn::TypeParamBound::Trait(trait_bound) = b {
+            // Check if the trait path ends with bound_name
+            trait_bound.path.segments.last()
+                .map(|seg| seg.ident == bound_name)
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    })
+}
+
+/// Get the TokenStream for a required bound
+fn required_bound_token(name: &str) -> proc_macro2::TokenStream {
+    match name {
+        "Hash" => quote! { ::std::hash::Hash },
+        "Eq" => quote! { ::std::cmp::Eq },
+        "Clone" => quote! { ::std::clone::Clone },
+        "Copy" => quote! { ::std::marker::Copy },
+        "Default" => quote! { ::std::default::Default },
+        _ => panic!("Unknown required bound: {}", name),
+    }
+}
+
+/// Merge user bounds with required bounds, avoiding duplicates
+fn merge_bounds_with_required(tp: &syn::TypeParam) -> proc_macro2::TokenStream {
+    let ident = &tp.ident;
+    let user_bounds = &tp.bounds;
+    
+    // Required bounds for Datalog
+    let required = ["Hash", "Eq", "Clone", "Copy", "Default"];
+    let mut missing_bounds = Vec::new();
+    
+    for req in &required {
+        if !has_bound(tp, req) {
+            missing_bounds.push(required_bound_token(req));
+        }
+    }
+    
+    // Combine user bounds + missing required bounds
+    if missing_bounds.is_empty() {
+        // User already has all required bounds
+        quote! { #ident: #user_bounds }
+    } else if user_bounds.is_empty() {
+        // No user bounds, just add required ones
+        quote! { #ident: #(#missing_bounds)+* }
+    } else {
+        // Combine both
+        quote! { #ident: #user_bounds + #(#missing_bounds)+* }
+    }
+}
+
 /// Create a tokenstream for generic parameters (lifetimes + type params)
 /// Returns both the parameter declarations and the arguments
 fn generic_params_decl(context: &Context) -> proc_macro2::TokenStream {
     let has_lifetime = context.has_input_lifetime;
     let type_params: Vec<_> = collect_generic_params(context)
         .into_iter()
-        .map(|tp| {
-            let ident = &tp.ident;
-            // Add required trait bounds: Hash, Eq, Clone, Copy, Default
-            quote! { #ident: ::std::hash::Hash + ::std::cmp::Eq + ::std::clone::Clone + ::std::marker::Copy + ::std::default::Default }
-        })
+        .map(|tp| merge_bounds_with_required(tp))
         .collect();
     
     if !has_lifetime && type_params.is_empty() {
