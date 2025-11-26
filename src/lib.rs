@@ -321,6 +321,40 @@ impl Context {
             if let Some(c) = relation.generics.const_params().next() {
                 abort!(c.span(), "Const parameters are not yet supported in relations");
             }
+            
+            // Where clauses are not yet supported
+            if let Some(where_clause) = &relation.generics.where_clause {
+                abort!(
+                    where_clause.where_token.span(), 
+                    "Where clauses are not yet supported in relations. \
+                     Please specify trait bounds directly on the type parameter instead, e.g., `T: Trait`"
+                );
+            }
+            
+            // Check for default type parameters (not supported)
+            for type_param in relation.generics.type_params() {
+                if type_param.default.is_some() {
+                    abort!(
+                        type_param.ident.span(),
+                        "Default type parameters are not supported in relations. \
+                         Please remove the default value from type parameter `{}`",
+                        type_param.ident
+                    );
+                }
+            }
+            
+            // Check for lifetime bounds (not supported)
+            for lifetime_param in relation.generics.lifetimes() {
+                if !lifetime_param.bounds.is_empty() {
+                    abort!(
+                        lifetime_param.lifetime.span(),
+                        "Lifetime bounds are not supported in relations. \
+                         Please remove bounds from lifetime parameter `{}`",
+                        lifetime_param.lifetime
+                    );
+                }
+            }
+            
             let num_lifetimes = relation.generics.lifetimes().count();
 
             match relation.relation_type() {
@@ -634,23 +668,15 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
             let lower = to_lowercase(&relation.name);
             
             // For the reference impl, we need to add the lifetime to the existing generics
-            let ref_impl_generics = if context.has_input_lifetime {
-                // Already has 'a, need to add '__b
-                let type_params: Vec<_> = collect_generic_params(context)
-                    .into_iter()
-                    .map(|tp| merge_bounds_with_required(tp))
-                    .collect();
-                quote! { <'a, '__b, #(#type_params),*> }
-            } else {
-                // No 'a, but might have type params
+            let ref_impl_generics = {
                 let type_params: Vec<_> = collect_generic_params(context)
                     .into_iter()
                     .map(|tp| merge_bounds_with_required(tp))
                     .collect();
                 if type_params.is_empty() {
-                    quote! { <'__b> }
+                    quote! { <'a> }
                 } else {
-                    quote! { <'__b, #(#type_params),*> }
+                    quote! { <'a, #(#type_params),*> }
                 }
             };
             
@@ -663,10 +689,10 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
                         self.#lower.extend(iter);
                     }
                 }
-                impl #ref_impl_generics ::core::iter::Extend<&'__b #rel_ty> for Crepe #generics_args {
+                impl #ref_impl_generics ::core::iter::Extend<&'a #rel_ty> for Crepe #generics_args {
                     fn extend<__I>(&mut self, iter: __I)
                     where
-                        __I: ::core::iter::IntoIterator<Item = &'__b #rel_ty>,
+                        __I: ::core::iter::IntoIterator<Item = &'a #rel_ty>,
                     {
                         self.extend(iter.into_iter().copied());
                     }
