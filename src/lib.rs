@@ -583,34 +583,23 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
             let generics = &relation.generics;
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
-            
-            // Check if there are generic params  
-            if generics.params.is_empty() {
-                quote_spanned! {name.span()=>
-                    #[derive(
-                        ::core::marker::Copy,
-                        ::core::clone::Clone,
-                        ::core::cmp::Eq,
-                        ::core::cmp::PartialEq,
-                        ::core::hash::Hash,
-                    )]
-                    #(#attrs)*
-                    #vis #struct_token #name (#fields) #semi_token
-                }
+            let gen_params = if generics.params.is_empty() {
+                quote! { }
             } else {
-                let gen_params = &generics.params;
-                let where_clause = &generics.where_clause;
-                quote_spanned! {name.span()=>
-                    #[derive(
-                        ::core::marker::Copy,
-                        ::core::clone::Clone,
-                        ::core::cmp::Eq,
-                        ::core::cmp::PartialEq,
-                        ::core::hash::Hash,
-                    )]
-                    #(#attrs)*
-                    #vis #struct_token #name < #gen_params > (#fields) #where_clause #semi_token
-                }
+                let generics_params = &generics.params;
+                quote! { < #generics_params > }
+            };
+
+            quote_spanned! {name.span()=>
+                #[derive(
+                    ::core::marker::Copy,
+                    ::core::clone::Clone,
+                    ::core::cmp::Eq,
+                    ::core::cmp::PartialEq,
+                    ::core::hash::Hash,
+                )]
+                #(#attrs)*
+                #vis #struct_token #name #gen_params (#fields) #semi_token
             }
         })
         .collect()
