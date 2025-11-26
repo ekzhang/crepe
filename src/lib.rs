@@ -316,44 +316,8 @@ impl Context {
                 abort!(relation.name.span(), "Duplicate relation name: {}", name);
             }
 
-            // Type parameters are now supported!
-            // Const parameters are not yet supported
-            if let Some(c) = relation.generics.const_params().next() {
-                abort!(c.span(), "Const parameters are not yet supported in relations");
-            }
-            
-            // Where clauses are not yet supported
-            if let Some(where_clause) = &relation.generics.where_clause {
-                abort!(
-                    where_clause.where_token.span(), 
-                    "Where clauses are not yet supported in relations. \
-                     Please specify trait bounds directly on the type parameter instead, e.g., `T: Trait`"
-                );
-            }
-            
-            // Check for default type parameters (not supported)
-            for type_param in relation.generics.type_params() {
-                if type_param.default.is_some() {
-                    abort!(
-                        type_param.ident.span(),
-                        "Default type parameters are not supported in relations. \
-                         Please remove the default value from type parameter `{}`",
-                        type_param.ident
-                    );
-                }
-            }
-            
-            // Check for lifetime bounds (not supported)
-            for lifetime_param in relation.generics.lifetimes() {
-                if !lifetime_param.bounds.is_empty() {
-                    abort!(
-                        lifetime_param.lifetime.span(),
-                        "Lifetime bounds are not supported in relations. \
-                         Please remove bounds from lifetime parameter `{}`",
-                        lifetime_param.lifetime
-                    );
-                }
-            }
+            // Validate generic parameters
+            validate_generic_params(&relation);
             
             let num_lifetimes = relation.generics.lifetimes().count();
 
@@ -652,15 +616,11 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
             
             // For the reference impl, we need to add the lifetime to the existing generics
             let ref_impl_generics = {
-                let type_params: Vec<_> = collect_generic_params(context)
-                    .into_iter()
-                    .map(|tp| merge_bounds_with_required(tp))
-                    .collect();
-                if type_params.is_empty() {
-                    quote! { <'a> }
-                } else {
-                    quote! { <'a, #(#type_params),*> }
+                let mut items = vec![quote! { 'a }];
+                for tp in collect_generic_params(context) {
+                    items.push(merge_bounds_with_required(tp));
                 }
+                format_generics(items)
             };
             
             quote! {
@@ -1288,12 +1248,46 @@ fn to_lowercase(name: &Ident) -> Ident {
     Ident::new(&s, name.span())
 }
 
-/// Create a tokenstream for a lifetime bound/application if it's needed
-fn lifetime(needs_lifetime: bool) -> proc_macro2::TokenStream {
-    if needs_lifetime {
-        quote! { <'a> }
-    } else {
-        quote! {}
+/// Validate generic parameters on a relation
+/// Checks for unsupported features and provides helpful error messages
+fn validate_generic_params(relation: &Relation) {
+    // Type parameters are now supported!
+    // Const parameters are not yet supported
+    if let Some(c) = relation.generics.const_params().next() {
+        abort!(c.span(), "Const parameters are not yet supported in relations");
+    }
+    
+    // Where clauses are not yet supported
+    if let Some(where_clause) = &relation.generics.where_clause {
+        abort!(
+            where_clause.where_token.span(), 
+            "Where clauses are not yet supported in relations. \
+             Please specify trait bounds directly on the type parameter instead, e.g., `T: Trait`"
+        );
+    }
+    
+    // Check for default type parameters (not supported)
+    for type_param in relation.generics.type_params() {
+        if type_param.default.is_some() {
+            abort!(
+                type_param.ident.span(),
+                "Default type parameters are not supported in relations. \
+                 Please remove the default value from type parameter `{}`",
+                type_param.ident
+            );
+        }
+    }
+    
+    // Check for lifetime bounds (not supported)
+    for lifetime_param in relation.generics.lifetimes() {
+        if !lifetime_param.bounds.is_empty() {
+            abort!(
+                lifetime_param.lifetime.span(),
+                "Lifetime bounds are not supported in relations. \
+                 Please remove bounds from lifetime parameter `{}`",
+                lifetime_param.lifetime
+            );
+        }
     }
 }
 
@@ -1315,17 +1309,17 @@ fn collect_generic_params(context: &Context) -> Vec<&syn::TypeParam> {
 
 /// Check if a type parameter has a specific trait bound
 fn has_bound(tp: &syn::TypeParam, bound_name: &str) -> bool {
-    tp.bounds.iter().any(|b| {
-        if let syn::TypeParamBound::Trait(trait_bound) = b {
-            // Check if the trait path ends with bound_name
+    tp.bounds.iter().any(|b| match b {
+        syn::TypeParamBound::Trait(trait_bound) => {
             trait_bound.path.segments.last()
-                .map(|seg| seg.ident == bound_name)
-                .unwrap_or(false)
-        } else {
-            false
+                .map_or(false, |seg| seg.ident == bound_name)
         }
+        _ => false,
     })
 }
+
+/// Required trait bounds for all generic types in Datalog relations
+const REQUIRED_BOUNDS: &[&str] = &["Hash", "Eq", "Clone", "Copy", "Default"];
 
 /// Get the TokenStream for a required bound
 fn required_bound_token(name: &str) -> proc_macro2::TokenStream {
@@ -1344,68 +1338,47 @@ fn merge_bounds_with_required(tp: &syn::TypeParam) -> proc_macro2::TokenStream {
     let ident = &tp.ident;
     let user_bounds = &tp.bounds;
     
-    // Required bounds for Datalog
-    let required = ["Hash", "Eq", "Clone", "Copy", "Default"];
-    let mut missing_bounds = Vec::new();
-    
-    for req in &required {
-        if !has_bound(tp, req) {
-            missing_bounds.push(required_bound_token(req));
-        }
-    }
+    // Collect missing required bounds
+    let missing_bounds: Vec<_> = REQUIRED_BOUNDS.iter()
+        .filter(|&req| !has_bound(tp, req))
+        .map(|req| required_bound_token(req))
+        .collect();
     
     // Combine user bounds + missing required bounds
-    if missing_bounds.is_empty() {
-        // User already has all required bounds
-        quote! { #ident: #user_bounds }
-    } else if user_bounds.is_empty() {
-        // No user bounds, just add required ones
-        quote! { #ident: #(#missing_bounds)+* }
-    } else {
-        // Combine both
-        quote! { #ident: #user_bounds + #(#missing_bounds)+* }
+    match (user_bounds.is_empty(), missing_bounds.is_empty()) {
+        (true, true) => quote! { #ident },  // No bounds at all (shouldn't happen)
+        (true, false) => quote! { #ident: #(#missing_bounds)+* },
+        (false, true) => quote! { #ident: #user_bounds },
+        (false, false) => quote! { #ident: #user_bounds + #(#missing_bounds)+* },
     }
 }
 
 /// Helper to format generic parameters with angle brackets
 /// Returns `<item1, item2, ...>` or empty if the list is empty
 fn format_generics(items: Vec<proc_macro2::TokenStream>) -> proc_macro2::TokenStream {
-    if items.is_empty() {
-        quote! {}
-    } else {
-        quote! { <#(#items),*> }
-    }
+    if items.is_empty() { quote! {} } else { quote! { <#(#items),*> } }
 }
 
 /// Create a tokenstream for generic parameters (lifetimes + type params)
-/// Returns both the parameter declarations and the arguments
 fn generic_params_decl(context: &Context) -> proc_macro2::TokenStream {
     let mut items = Vec::new();
-    
     if context.has_input_lifetime {
         items.push(quote! { 'a });
     }
-    
-    for tp in collect_generic_params(context) {
-        items.push(merge_bounds_with_required(tp));
-    }
-    
+    items.extend(collect_generic_params(context).into_iter().map(merge_bounds_with_required));
     format_generics(items)
 }
 
 /// Create a tokenstream for generic arguments (just the names, no bounds)
 fn generic_params_args(context: &Context) -> proc_macro2::TokenStream {
     let mut items = Vec::new();
-    
     if context.has_input_lifetime {
         items.push(quote! { 'a });
     }
-    
-    for tp in collect_generic_params(context) {
+    items.extend(collect_generic_params(context).into_iter().map(|tp| {
         let ident = &tp.ident;
-        items.push(quote! { #ident });
-    }
-    
+        quote! { #ident }
+    }));
     format_generics(items)
 }
 
@@ -1425,25 +1398,22 @@ fn relation_type(rel: &Relation, usage: LifetimeUsage) -> proc_macro2::TokenStre
     };
 
     let name = &rel.name;
-    let lifetimes = rel
-        .generics
-        .lifetimes()
-        .map(|l| Lifetime::new(symbol, l.span()))
-        .collect::<Vec<_>>();
     
-    // Collect type parameters
-    let type_params = rel
-        .generics
-        .type_params()
-        .map(|tp| &tp.ident)
-        .collect::<Vec<_>>();
+    // Build list of generic arguments
+    let mut items = Vec::new();
+    items.extend(rel.generics.lifetimes().map(|l| {
+        let lifetime = Lifetime::new(symbol, l.span());
+        quote! { #lifetime }
+    }));
+    items.extend(rel.generics.type_params().map(|tp| {
+        let ident = &tp.ident;
+        quote! { #ident }
+    }));
     
-    // Combine lifetimes and type parameters
-    if type_params.is_empty() {
-        quote! { #name<#(#lifetimes),*> }
-    } else if lifetimes.is_empty() {
-        quote! { #name<#(#type_params),*> }
+    // Format with angle brackets if there are any generics
+    if items.is_empty() {
+        quote! { #name }
     } else {
-        quote! { #name<#(#lifetimes,)* #(#type_params),*> }
+        quote! { #name<#(#items),*> }
     }
 }
