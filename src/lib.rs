@@ -316,11 +316,10 @@ impl Context {
                 abort!(relation.name.span(), "Duplicate relation name: {}", name);
             }
 
-            if let Some(t) = relation.generics.type_params().next() {
-                abort!(t.span(), "Type parameters are not supported in relations");
-            }
+            // Type parameters are now supported!
+            // Const parameters are not yet supported
             if let Some(c) = relation.generics.const_params().next() {
-                abort!(c.span(), "Const parameters are not supported in relations");
+                abort!(c.span(), "Const parameters are not yet supported in relations");
             }
             let num_lifetimes = relation.generics.lifetimes().count();
 
@@ -550,16 +549,34 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
             let generics = &relation.generics;
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
-            quote_spanned! {name.span()=>
-                #[derive(
-                    ::core::marker::Copy,
-                    ::core::clone::Clone,
-                    ::core::cmp::Eq,
-                    ::core::cmp::PartialEq,
-                    ::core::hash::Hash,
-                )]
-                #(#attrs)*
-                #vis #struct_token #name #generics (#fields)#semi_token
+            
+            // Check if there are generic params  
+            if generics.params.is_empty() {
+                quote_spanned! {name.span()=>
+                    #[derive(
+                        ::core::marker::Copy,
+                        ::core::clone::Clone,
+                        ::core::cmp::Eq,
+                        ::core::cmp::PartialEq,
+                        ::core::hash::Hash,
+                    )]
+                    #(#attrs)*
+                    #vis #struct_token #name (#fields) #semi_token
+                }
+            } else {
+                let gen_params = &generics.params;
+                let where_clause = &generics.where_clause;
+                quote_spanned! {name.span()=>
+                    #[derive(
+                        ::core::marker::Copy,
+                        ::core::clone::Clone,
+                        ::core::cmp::Eq,
+                        ::core::cmp::PartialEq,
+                        ::core::hash::Hash,
+                    )]
+                    #(#attrs)*
+                    #vis #struct_token #name < #gen_params > (#fields) #where_clause #semi_token
+                }
             }
         })
         .collect()
@@ -570,8 +587,6 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         .rels_input
         .values()
         .map(|relation| {
-            // because the generics have been validated to only contain lifetimes
-            // no further checking is done here.
             let rel_ty = relation_type(relation, LifetimeUsage::Item);
             let lowercase_name = to_lowercase(&relation.name);
             quote! {
@@ -580,11 +595,11 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         })
         .collect();
 
-    let lifetime = lifetime(context.has_input_lifetime);
+    let generics_decl = generic_params_decl(context);
 
     quote! {
         #[derive(::core::default::Default)]
-        struct Crepe #lifetime {
+        struct Crepe #generics_decl {
             #fields
         }
     }
@@ -594,10 +609,11 @@ fn make_runtime_impl(context: &Context) -> proc_macro2::TokenStream {
     let builders = make_extend(context);
     let run = make_run(context);
 
-    let lifetime = lifetime(context.has_input_lifetime);
+    let generics_decl = generic_params_decl(context);
+    let generics_args = generic_params_args(context);
 
     quote! {
-        impl #lifetime Crepe #lifetime {
+        impl #generics_decl Crepe #generics_args {
             fn new() -> Self {
                 ::core::default::Default::default()
             }
@@ -613,21 +629,50 @@ fn make_extend(context: &Context) -> proc_macro2::TokenStream {
         .values()
         .map(|relation| {
             let rel_ty = relation_type(relation, LifetimeUsage::Item);
-            let lifetime = lifetime(context.has_input_lifetime);
+            let generics_decl = generic_params_decl(context);
+            let generics_args = generic_params_args(context);
             let lower = to_lowercase(&relation.name);
+            
+            // For the reference impl, we need to add the lifetime to the existing generics
+            let ref_impl_generics = if context.has_input_lifetime {
+                // Already has 'a, need to add '__b
+                let type_params: Vec<_> = collect_generic_params(context)
+                    .into_iter()
+                    .map(|tp| {
+                        let ident = &tp.ident;
+                        quote! { #ident: ::std::hash::Hash + ::std::cmp::Eq + ::std::clone::Clone + ::std::marker::Copy + ::std::default::Default }
+                    })
+                    .collect();
+                quote! { <'a, '__b, #(#type_params),*> }
+            } else {
+                // No 'a, but might have type params
+                let type_params: Vec<_> = collect_generic_params(context)
+                    .into_iter()
+                    .map(|tp| {
+                        let ident = &tp.ident;
+                        quote! { #ident: ::std::hash::Hash + ::std::cmp::Eq + ::std::clone::Clone + ::std::marker::Copy + ::std::default::Default }
+                    })
+                    .collect();
+                if type_params.is_empty() {
+                    quote! { <'__b> }
+                } else {
+                    quote! { <'__b, #(#type_params),*> }
+                }
+            };
+            
             quote! {
-                impl #lifetime ::core::iter::Extend<#rel_ty> for Crepe #lifetime {
-                    fn extend<T>(&mut self, iter: T)
+                impl #generics_decl ::core::iter::Extend<#rel_ty> for Crepe #generics_args {
+                    fn extend<__I>(&mut self, iter: __I)
                     where
-                        T: ::core::iter::IntoIterator<Item = #rel_ty>,
+                        __I: ::core::iter::IntoIterator<Item = #rel_ty>,
                     {
                         self.#lower.extend(iter);
                     }
                 }
-                impl<'a> ::core::iter::Extend<&'a #rel_ty> for Crepe #lifetime {
-                    fn extend<T>(&mut self, iter: T)
+                impl #ref_impl_generics ::core::iter::Extend<&'__b #rel_ty> for Crepe #generics_args {
+                    fn extend<__I>(&mut self, iter: __I)
                     where
-                        T: ::core::iter::IntoIterator<Item = &'a #rel_ty>,
+                        __I: ::core::iter::IntoIterator<Item = &'__b #rel_ty>,
                     {
                         self.extend(iter.into_iter().copied());
                     }
@@ -1249,12 +1294,71 @@ fn lifetime(needs_lifetime: bool) -> proc_macro2::TokenStream {
     }
 }
 
+/// Collect all unique type parameters from input relations
+fn collect_generic_params(context: &Context) -> Vec<&syn::TypeParam> {
+    let mut seen = HashSet::new();
+    let mut params = Vec::new();
+    
+    for relation in context.rels_input.values() {
+        for param in relation.generics.type_params() {
+            if seen.insert(param.ident.to_string()) {
+                params.push(param);
+            }
+        }
+    }
+    
+    params
+}
+
+/// Create a tokenstream for generic parameters (lifetimes + type params)
+/// Returns both the parameter declarations and the arguments
+fn generic_params_decl(context: &Context) -> proc_macro2::TokenStream {
+    let has_lifetime = context.has_input_lifetime;
+    let type_params: Vec<_> = collect_generic_params(context)
+        .into_iter()
+        .map(|tp| {
+            let ident = &tp.ident;
+            // Add required trait bounds: Hash, Eq, Clone, Copy, Default
+            quote! { #ident: ::std::hash::Hash + ::std::cmp::Eq + ::std::clone::Clone + ::std::marker::Copy + ::std::default::Default }
+        })
+        .collect();
+    
+    if !has_lifetime && type_params.is_empty() {
+        quote! {}
+    } else if has_lifetime && type_params.is_empty() {
+        quote! { <'a> }
+    } else if !has_lifetime && !type_params.is_empty() {
+        quote! { <#(#type_params),*> }
+    } else {
+        quote! { <'a, #(#type_params),*> }
+    }
+}
+
+/// Create a tokenstream for generic arguments (just the names, no bounds)
+fn generic_params_args(context: &Context) -> proc_macro2::TokenStream {
+    let has_lifetime = context.has_input_lifetime;
+    let type_param_idents: Vec<_> = collect_generic_params(context)
+        .into_iter()
+        .map(|tp| &tp.ident)
+        .collect();
+    
+    if !has_lifetime && type_param_idents.is_empty() {
+        quote! {}
+    } else if has_lifetime && type_param_idents.is_empty() {
+        quote! { <'a> }
+    } else if !has_lifetime && !type_param_idents.is_empty() {
+        quote! { <#(#type_param_idents),*> }
+    } else {
+        quote! { <'a, #(#type_param_idents),*> }
+    }
+}
+
 enum LifetimeUsage {
     Item,
     Local,
 }
 
-/// Returns the type of a relation, with appropriate lifetimes
+/// Returns the type of a relation, with appropriate lifetimes and type parameters
 fn relation_type(rel: &Relation, usage: LifetimeUsage) -> proc_macro2::TokenStream {
     let symbol = match rel.relation_type().unwrap() {
         RelationType::Input | RelationType::Output => "'a",
@@ -1270,5 +1374,20 @@ fn relation_type(rel: &Relation, usage: LifetimeUsage) -> proc_macro2::TokenStre
         .lifetimes()
         .map(|l| Lifetime::new(symbol, l.span()))
         .collect::<Vec<_>>();
-    quote! { #name<#(#lifetimes),*> }
+    
+    // Collect type parameters
+    let type_params = rel
+        .generics
+        .type_params()
+        .map(|tp| &tp.ident)
+        .collect::<Vec<_>>();
+    
+    // Combine lifetimes and type parameters
+    if type_params.is_empty() {
+        quote! { #name<#(#lifetimes),*> }
+    } else if lifetimes.is_empty() {
+        quote! { #name<#(#type_params),*> }
+    } else {
+        quote! { #name<#(#lifetimes,)* #(#type_params),*> }
+    }
 }
