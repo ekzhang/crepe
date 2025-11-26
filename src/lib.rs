@@ -1384,43 +1384,46 @@ fn merge_bounds_with_required(tp: &syn::TypeParam) -> proc_macro2::TokenStream {
     }
 }
 
+/// Helper to format generic parameters with angle brackets
+/// Returns `<item1, item2, ...>` or empty if the list is empty
+fn format_generics(items: Vec<proc_macro2::TokenStream>) -> proc_macro2::TokenStream {
+    if items.is_empty() {
+        quote! {}
+    } else {
+        quote! { <#(#items),*> }
+    }
+}
+
 /// Create a tokenstream for generic parameters (lifetimes + type params)
 /// Returns both the parameter declarations and the arguments
 fn generic_params_decl(context: &Context) -> proc_macro2::TokenStream {
-    let has_lifetime = context.has_input_lifetime;
-    let type_params: Vec<_> = collect_generic_params(context)
-        .into_iter()
-        .map(|tp| merge_bounds_with_required(tp))
-        .collect();
+    let mut items = Vec::new();
     
-    if !has_lifetime && type_params.is_empty() {
-        quote! {}
-    } else if has_lifetime && type_params.is_empty() {
-        quote! { <'a> }
-    } else if !has_lifetime && !type_params.is_empty() {
-        quote! { <#(#type_params),*> }
-    } else {
-        quote! { <'a, #(#type_params),*> }
+    if context.has_input_lifetime {
+        items.push(quote! { 'a });
     }
+    
+    for tp in collect_generic_params(context) {
+        items.push(merge_bounds_with_required(tp));
+    }
+    
+    format_generics(items)
 }
 
 /// Create a tokenstream for generic arguments (just the names, no bounds)
 fn generic_params_args(context: &Context) -> proc_macro2::TokenStream {
-    let has_lifetime = context.has_input_lifetime;
-    let type_param_idents: Vec<_> = collect_generic_params(context)
-        .into_iter()
-        .map(|tp| &tp.ident)
-        .collect();
+    let mut items = Vec::new();
     
-    if !has_lifetime && type_param_idents.is_empty() {
-        quote! {}
-    } else if has_lifetime && type_param_idents.is_empty() {
-        quote! { <'a> }
-    } else if !has_lifetime && !type_param_idents.is_empty() {
-        quote! { <#(#type_param_idents),*> }
-    } else {
-        quote! { <'a, #(#type_param_idents),*> }
+    if context.has_input_lifetime {
+        items.push(quote! { 'a });
     }
+    
+    for tp in collect_generic_params(context) {
+        let ident = &tp.ident;
+        items.push(quote! { #ident });
+    }
+    
+    format_generics(items)
 }
 
 enum LifetimeUsage {
