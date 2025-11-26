@@ -583,12 +583,6 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
             let generics = &relation.generics;
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
-            let gen_params = if generics.params.is_empty() {
-                quote! { }
-            } else {
-                let generics_params = &generics.params;
-                quote! { < #generics_params > }
-            };
 
             quote_spanned! {name.span()=>
                 #[derive(
@@ -599,7 +593,7 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
                     ::core::hash::Hash,
                 )]
                 #(#attrs)*
-                #vis #struct_token #name #gen_params (#fields) #semi_token
+                #vis #struct_token #name #generics (#fields)#semi_token
             }
         })
         .collect()
