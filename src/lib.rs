@@ -900,6 +900,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             #finalize_profiling
             
             __crepe_profiling_stats.total_duration = __crepe_total_start.elapsed();
+            __crepe_profiling_stats.report();
             (#output, __crepe_profiling_stats)
         }
 
