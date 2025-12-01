@@ -627,9 +627,9 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
                 let mut sorted_rules = self.rules.clone();
                 sorted_rules.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
                 
-                println!("{:<40} {:>12} {:>12} {:>15} {:>15}", 
+                println!("{:<50} {:>12} {:>12} {:>15} {:>15}", 
                     "Rule", "Total (ms)", "Calls", "Avg (μs)", "Facts Gen.");
-                println!("{}", "-".repeat(100));
+                println!("{}", "-".repeat(110));
                 
                 for rule in &sorted_rules {
                     let total_ms = rule.total_duration.as_secs_f64() * 1000.0;
@@ -640,7 +640,7 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
                         0.0
                     };
                     
-                    println!("{:<40} {:>10.2}ms {:>12} {:>13.2}μs {:>15}", 
+                    println!("{:<50} {:>10.2}ms {:>12} {:>13.2}μs {:>15}", 
                         rule.rule_id, total_ms, rule.eval_count, avg_us, rule.facts_generated);
                 }
                 println!();
@@ -1052,6 +1052,7 @@ fn make_rule(
         let name = format_ident!("__{}", to_lowercase(relation));
         let name_new = format_ident!("__{}_new", to_lowercase(relation));
         quote! {
+            #stats_var.1 += 1;
             let __crepe_goal = #relation(#fields);
             if !#name.contains(&__crepe_goal) {
                 #name_new.insert(__crepe_goal);
@@ -1118,7 +1119,6 @@ fn make_rule(
                 __crepe_rule_stats.entry(#rule_id.to_string())
                 .or_insert((::std::time::Duration::ZERO, 0, 0));
             let #rule_id_ident = ::std::time::Instant::now();
-            #stats_var.1 += 1;
             
             #rule_body
             
