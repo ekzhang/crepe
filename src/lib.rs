@@ -1052,7 +1052,6 @@ fn make_rule(
         let name = format_ident!("__{}", to_lowercase(relation));
         let name_new = format_ident!("__{}_new", to_lowercase(relation));
         quote! {
-            #stats_var.1 += 1;
             let __crepe_goal = #relation(#fields);
             if !#name.contains(&__crepe_goal) {
                 #name_new.insert(__crepe_goal);
@@ -1118,6 +1117,7 @@ fn make_rule(
             let #stats_var: &mut (::std::time::Duration, u64, u64) = 
                 __crepe_rule_stats.entry(#rule_id.to_string())
                 .or_insert((::std::time::Duration::ZERO, 0, 0));
+            #stats_var.1 += 1;
             let #rule_id_ident = ::std::time::Instant::now();
             
             #rule_body
