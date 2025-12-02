@@ -1042,7 +1042,9 @@ fn make_rule(
     indices: &mut HashSet<Index>,
 ) -> proc_macro2::TokenStream {
     let goal_relation_name = rule.goal.relation.to_string();
-    let rule_id = format!("{}#{}", goal_relation_name, rule_idx);
+    let span = rule.goal.relation.span();
+    let line_info = span.unwrap().start();
+    let rule_id = format!("{}#{}:L{}", goal_relation_name, rule_idx, line_info.line());
     let rule_id_ident = format_ident!("__crepe_rule_{}_{}", to_lowercase(&rule.goal.relation), rule_idx);
     let stats_var = format_ident!("__crepe_stats_{}_{}", to_lowercase(&rule.goal.relation), rule_idx);
     
