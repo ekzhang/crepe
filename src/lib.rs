@@ -580,7 +580,7 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
 
     quote! {
         #[derive(::core::default::Default)]
-        struct Crepe #generics_decl {
+        pub struct Crepe #generics_decl {
             #fields
         }
 
