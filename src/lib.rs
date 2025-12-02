@@ -658,7 +658,7 @@ fn make_runtime_impl(context: &Context) -> proc_macro2::TokenStream {
 
     quote! {
         impl #generics_decl Crepe #generics_args {
-            fn new() -> Self {
+            pub fn new() -> Self {
                 ::core::default::Default::default()
             }
             #run
@@ -876,7 +876,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     let output_ty_default = make_output_ty(context, quote! {});
     quote! {
         #[allow(clippy::collapsible_if)]
-        fn run_with_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
+        pub fn run_with_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
             self
         ) -> #output_ty_hasher {
             #initialize
@@ -884,12 +884,12 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             #output
         }
 
-        fn run(self) -> #output_ty_default {
+        pub fn run(self) -> #output_ty_default {
             self.run_with_hasher::<::std::collections::hash_map::RandomState>()
         }
 
         #[allow(clippy::collapsible_if)]
-        fn run_with_profiling_and_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
+        pub fn run_with_profiling_and_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
             self
         ) -> (#output_ty_hasher, ProfilingStats) {
             let __crepe_total_start = ::std::time::Instant::now();
@@ -903,7 +903,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             (#output, __crepe_profiling_stats)
         }
 
-        fn run_with_profiling(self) -> (#output_ty_default, ProfilingStats) {
+        pub fn run_with_profiling(self) -> (#output_ty_default, ProfilingStats) {
             self.run_with_profiling_and_hasher::<::std::collections::hash_map::RandomState>()
         }
     }
