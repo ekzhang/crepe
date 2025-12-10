@@ -37,17 +37,13 @@ fn test_trait_method_call() {
         Product(Item { id: 2, price: 200 }),
         Product(Item { id: 3, price: 300 }),
     ]);
-    
+
     let (price_info,) = runtime.run();
     let mut results: Vec<_> = price_info
         .into_iter()
         .map(|PriceInfo(item, price)| (item.id, price))
         .collect();
     results.sort_unstable();
-    
-    assert_eq!(results, vec![
-        (1, 100),
-        (2, 200),
-        (3, 300),
-    ]);
+
+    assert_eq!(results, vec![(1, 100), (2, 200), (3, 300),]);
 }
