@@ -1123,7 +1123,7 @@ fn make_rule(
     quote! {
         {
             let #stats_var: &mut (::std::time::Duration, u64, u64) =
-                __crepe_rule_stats.entry(#rule_id)
+                __crepe_rule_stats.entry(#rule_id.to_string())
                 .or_insert((::std::time::Duration::ZERO, 0, 0));
             #stats_var.1 += 1;
             let #rule_id_ident = ::std::time::Instant::now();
