@@ -39,25 +39,31 @@ crepe! {
 
 #[test]
 fn test_graph_with_custom_node_trait() {
-    let seattle = City { id: 1, name: "Seattle" };
-    let portland = City { id: 2, name: "Portland" };
+    let seattle = City {
+        id: 1,
+        name: "Seattle",
+    };
+    let portland = City {
+        id: 2,
+        name: "Portland",
+    };
     let sf = City { id: 3, name: "SF" };
     let la = City { id: 4, name: "LA" };
-    
+
     let mut runtime = Crepe::new();
     runtime.extend([
         Connection(seattle, portland),
         Connection(portland, sf),
         Connection(sf, la),
     ]);
-    
+
     let (connected,) = runtime.run();
     let mut results: Vec<_> = connected
         .into_iter()
         .map(|Connected(x, y)| (x.id(), y.id()))
         .collect();
     results.sort_unstable();
-    
+
     // Check all connections
     assert!(results.contains(&(1, 2))); // Seattle -> Portland
     assert!(results.contains(&(1, 3))); // Seattle -> SF
@@ -65,6 +71,6 @@ fn test_graph_with_custom_node_trait() {
     assert!(results.contains(&(2, 3))); // Portland -> SF
     assert!(results.contains(&(2, 4))); // Portland -> LA
     assert!(results.contains(&(3, 4))); // SF -> LA
-    
+
     assert_eq!(results.len(), 6);
 }

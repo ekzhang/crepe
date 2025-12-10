@@ -11,7 +11,9 @@ trait Custom {
 struct Item(u32);
 
 impl Custom for Item {
-    fn custom_id(&self) -> u32 { self.0 }
+    fn custom_id(&self) -> u32 {
+        self.0
+    }
 }
 
 impl Debug for Item {
@@ -39,18 +41,11 @@ crepe! {
 #[test]
 fn test_multiple_trait_bounds() {
     let mut runtime = Crepe::new();
-    runtime.extend([
-        Input(Item(1)),
-        Input(Item(2)),
-        Input(Item(3)),
-    ]);
-    
+    runtime.extend([Input(Item(1)), Input(Item(2)), Input(Item(3))]);
+
     let (output,) = runtime.run();
-    let mut results: Vec<_> = output
-        .into_iter()
-        .map(|Output(x)| x.custom_id())
-        .collect();
+    let mut results: Vec<_> = output.into_iter().map(|Output(x)| x.custom_id()).collect();
     results.sort_unstable();
-    
+
     assert_eq!(results, vec![1, 2, 3]);
 }
