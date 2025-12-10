@@ -622,14 +622,14 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
                 println!("\n=== Crepe Profiling Report ===");
                 println!("Total execution time: {:?}", self.total_duration);
                 println!("\nRule timings (sorted by total duration):");
-                
+
                 let mut sorted_rules = self.rules.clone();
                 sorted_rules.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
-                
-                println!("{:<50} {:>12} {:>12} {:>15} {:>15}", 
+
+                println!("{:<50} {:>12} {:>12} {:>15} {:>15}",
                     "Rule", "Total (ms)", "Calls", "Avg (μs)", "Facts Gen.");
                 println!("{}", "-".repeat(110));
-                
+
                 for rule in &sorted_rules {
                     let total_ms = rule.total_duration.as_secs_f64() * 1000.0;
                     let avg_us = rule.avg_duration().as_secs_f64() * 1_000_000.0;
@@ -638,8 +638,8 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
                     } else {
                         0.0
                     };
-                    
-                    println!("{:<50} {:>10.2}ms {:>12} {:>13.2}μs {:>15}", 
+
+                    println!("{:<50} {:>10.2}ms {:>12} {:>13.2}μs {:>15}",
                         rule.rule_id, total_ms, rule.eval_count, avg_us, rule.facts_generated);
                 }
                 println!();
@@ -839,7 +839,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
         });
         let init_profiling = quote! {
             let mut __crepe_rule_stats: ::std::collections::HashMap<
-                String, 
+                String,
                 (::std::time::Duration, u64, u64)
             > = ::std::collections::HashMap::new();
         };
@@ -893,11 +893,11 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
         ) -> (#output_ty_hasher, ProfilingStats) {
             let __crepe_total_start = ::std::time::Instant::now();
             let mut __crepe_profiling_stats = ProfilingStats::default();
-            
+
             #initialize
             #main_loops
             #finalize_profiling
-            
+
             __crepe_profiling_stats.total_duration = __crepe_total_start.elapsed();
             (#output, __crepe_profiling_stats)
         }
@@ -1043,9 +1043,17 @@ fn make_rule(
     let span = rule.goal.relation.span();
     let line_info = span.unwrap().start();
     let rule_id = format!("{}#{}:L{}", goal_relation_name, rule_idx, line_info.line());
-    let rule_id_ident = format_ident!("__crepe_rule_{}_{}", to_lowercase(&rule.goal.relation), rule_idx);
-    let stats_var = format_ident!("__crepe_stats_{}_{}", to_lowercase(&rule.goal.relation), rule_idx);
-    
+    let rule_id_ident = format_ident!(
+        "__crepe_rule_{}_{}",
+        to_lowercase(&rule.goal.relation),
+        rule_idx
+    );
+    let stats_var = format_ident!(
+        "__crepe_stats_{}_{}",
+        to_lowercase(&rule.goal.relation),
+        rule_idx
+    );
+
     let goal = {
         let relation = &rule.goal.relation;
         let fields = &rule.goal.fields;
@@ -1074,7 +1082,7 @@ fn make_rule(
             _ => None,
         })
         .collect();
-    
+
     let rule_body = if fact_positions.is_empty() {
         // Will not change, so we only need to evaluate it once
         let mut datalog_vars: HashSet<String> = HashSet::new();
@@ -1111,17 +1119,17 @@ fn make_rule(
         }
         variants.into_iter().collect()
     };
-    
+
     quote! {
         {
-            let #stats_var: &mut (::std::time::Duration, u64, u64) = 
+            let #stats_var: &mut (::std::time::Duration, u64, u64) =
                 __crepe_rule_stats.entry(#rule_id.to_string())
                 .or_insert((::std::time::Duration::ZERO, 0, 0));
             #stats_var.1 += 1;
             let #rule_id_ident = ::std::time::Instant::now();
-            
+
             #rule_body
-            
+
             #stats_var.0 += #rule_id_ident.elapsed();
         }
     }
