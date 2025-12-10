@@ -299,7 +299,7 @@ struct Context {
 }
 
 impl Context {
-    fn new(program: Program) -> Self {
+    pub fn new(program: Program) -> Self {
         // Read in relations, ensure no duplicates
         let mut rels_input = HashMap::new();
         let mut rels_output = HashMap::new();
@@ -579,7 +579,7 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
 
     quote! {
         #[derive(::core::default::Default)]
-        struct Crepe #generics_decl {
+        pub struct Crepe #generics_decl {
             #fields
         }
     }
@@ -794,7 +794,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
     let output_ty_default = make_output_ty(context, quote! {});
     quote! {
         #[allow(clippy::collapsible_if)]
-        fn run_with_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
+        pub fn run_with_hasher<CrepeHasher: ::std::hash::BuildHasher + ::core::default::Default>(
             self
         ) -> #output_ty_hasher {
             #initialize
@@ -802,7 +802,7 @@ fn make_run(context: &Context) -> proc_macro2::TokenStream {
             #output
         }
 
-        fn run(self) -> #output_ty_default {
+        pub fn run(self) -> #output_ty_default {
             self.run_with_hasher::<::std::collections::hash_map::RandomState>()
         }
     }
