@@ -619,18 +619,17 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
         impl ProfilingStats {
             /// Print a formatted report of rule timings
             pub fn report(&self) {
+                use ::itertools::Itertools;
+
                 println!("\n=== Crepe Profiling Report ===");
                 println!("Total execution time: {:?}", self.total_duration);
                 println!("\nRule timings (sorted by total duration):");
-
-                let mut sorted_rules = self.rules.clone();
-                sorted_rules.sort_by(|a, b| b.total_duration.cmp(&a.total_duration));
 
                 println!("{:<50} {:>12} {:>12} {:>15} {:>15}",
                     "Rule", "Total (ms)", "Calls", "Avg (μs)", "Facts Gen.");
                 println!("{}", "-".repeat(110));
 
-                for rule in &sorted_rules {
+                for rule in self.rules.iter().sorted_by(|a, b| b.total_duration.cmp(&a.total_duration)) {
                     let total_ms = rule.total_duration.as_secs_f64() * 1000.0;
                     let avg_us = rule.avg_duration().as_secs_f64() * 1_000_000.0;
 
