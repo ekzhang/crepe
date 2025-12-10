@@ -299,7 +299,7 @@ struct Context {
 }
 
 impl Context {
-    fn new(program: Program) -> Self {
+    pub fn new(program: Program) -> Self {
         // Read in relations, ensure no duplicates
         let mut rels_input = HashMap::new();
         let mut rels_output = HashMap::new();
