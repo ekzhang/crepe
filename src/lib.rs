@@ -396,7 +396,7 @@ impl Context {
         };
         program.rules.iter().for_each(|rule| {
             check(&rule.goal);
-            if rels_input.get(&rule.goal.relation.to_string()).is_some() {
+            if rels_input.contains_key(&rule.goal.relation.to_string()) {
                 abort!(
                     rule.goal.relation.span(),
                     "Relations marked as @input cannot be derived from a rule."

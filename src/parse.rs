@@ -49,7 +49,7 @@ pub struct Relation {
     pub struct_token: Token![struct],
     pub name: Ident,
     pub generics: Generics,
-    pub paren_token: token::Paren,
+    pub _paren_token: token::Paren,
     pub fields: Punctuated<Field, Token![,]>,
     pub semi_token: Token![;],
 }
@@ -87,7 +87,7 @@ impl Parse for Relation {
             struct_token: input.parse()?,
             name: input.parse()?,
             generics: input.parse()?,
-            paren_token: parenthesized!(content in input),
+            _paren_token: parenthesized!(content in input),
             fields: content.parse_terminated(Field::parse_unnamed, Token![,])?,
             semi_token: input.parse()?,
         })
@@ -97,9 +97,9 @@ impl Parse for Relation {
 #[derive(Clone)]
 pub struct Rule {
     pub goal: Fact,
-    pub arrow_token: Token![<-],
+    pub _arrow_token: Token![<-],
     pub clauses: Punctuated<Clause, Token![,]>,
-    pub semi_token: Token![;],
+    pub _semi_token: Token![;],
 }
 
 impl Parse for Rule {
@@ -110,23 +110,23 @@ impl Parse for Rule {
         // A fact followed by a semicolon is the same as a rule with a single
         // clause of `(true)`
         if lookahead.peek(Token![;]) {
-            let semi_token = input.parse()?;
+            let _semi_token = input.parse()?;
 
-            let arrow_token = parse_quote!(<-);
+            let _arrow_token = parse_quote!(<-);
             let clauses = parse_quote!((true));
 
             Ok(Self {
                 goal,
-                arrow_token,
+                _arrow_token,
                 clauses,
-                semi_token,
+                _semi_token,
             })
         } else {
             Ok(Self {
                 goal,
-                arrow_token: input.parse()?,
+                _arrow_token: input.parse()?,
                 clauses: Punctuated::parse_separated_nonempty(input)?,
-                semi_token: input.parse()?,
+                _semi_token: input.parse()?,
             })
         }
     }
@@ -161,7 +161,7 @@ impl Parse for Clause {
 pub struct Fact {
     pub negate: Option<Token![!]>,
     pub relation: Ident,
-    pub paren_token: token::Paren,
+    pub _paren_token: token::Paren,
     pub fields: Punctuated<FactField, Token![,]>,
 }
 
@@ -172,7 +172,7 @@ impl Parse for Fact {
         Ok(Self {
             negate: input.parse()?,
             relation: input.parse()?,
-            paren_token: parenthesized!(content in input),
+            _paren_token: parenthesized!(content in input),
             fields: content.parse_terminated(
                 |input| {
                     if input.peek(Token![_]) {
@@ -193,9 +193,9 @@ impl Parse for Fact {
 
 #[derive(Clone)]
 pub struct For {
-    pub for_token: Token![for],
+    pub _for_token: Token![for],
     pub pat: Pat,
-    pub in_token: Token![in],
+    pub _in_token: Token![in],
     pub expr: Expr,
 }
 
@@ -203,9 +203,9 @@ impl Parse for For {
     fn parse(input: ParseStream) -> Result<Self> {
         #[allow(clippy::mixed_read_write_in_expression)]
         Ok(Self {
-            for_token: input.parse()?,
+            _for_token: input.parse()?,
             pat: Pat::parse_single(input)?,
-            in_token: input.parse()?,
+            _in_token: input.parse()?,
             expr: input.parse()?,
         })
     }

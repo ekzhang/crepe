@@ -5,7 +5,6 @@ use std::fmt::{Debug, Display};
 
 // Multiple trait definitions
 trait Node: Debug + Display {
-    fn id(&self) -> u32;
     fn name(&self) -> &'static str;
 }
 
@@ -22,9 +21,6 @@ struct City {
 }
 
 impl Node for City {
-    fn id(&self) -> u32 {
-        self.id
-    }
     fn name(&self) -> &'static str {
         self.city_name
     }
