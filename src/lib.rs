@@ -633,11 +633,6 @@ fn make_runtime_decl(context: &Context) -> proc_macro2::TokenStream {
                 for rule in &sorted_rules {
                     let total_ms = rule.total_duration.as_secs_f64() * 1000.0;
                     let avg_us = rule.avg_duration().as_secs_f64() * 1_000_000.0;
-                    let pct = if self.total_duration.as_nanos() > 0 {
-                        (rule.total_duration.as_nanos() as f64 / self.total_duration.as_nanos() as f64) * 100.0
-                    } else {
-                        0.0
-                    };
 
                     println!("{:<50} {:>10.2}ms {:>12} {:>13.2}μs {:>15}",
                         rule.rule_id, total_ms, rule.eval_count, avg_us, rule.facts_generated);
