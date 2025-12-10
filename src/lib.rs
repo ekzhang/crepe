@@ -547,7 +547,6 @@ fn make_struct_decls(context: &Context) -> proc_macro2::TokenStream {
             let generics = &relation.generics;
             let semi_token = &relation.semi_token;
             let fields = &relation.fields;
-
             quote_spanned! {name.span()=>
                 #[derive(
                     ::core::marker::Copy,
@@ -1374,10 +1373,8 @@ fn to_lowercase(name: &Ident) -> Ident {
 }
 
 /// Validate generic parameters on a relation
-/// Checks for unsupported features and provides helpful error messages
 fn validate_generic_params(relation: &Relation) {
-    // Type parameters are now supported!
-    // Const parameters are not yet supported
+    // Type parameters are supported, const not yet.
     if let Some(c) = relation.generics.const_params().next() {
         abort!(c.span(), "Const parameters are not yet supported in relations");
     }
