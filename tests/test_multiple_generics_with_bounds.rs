@@ -17,11 +17,15 @@ struct MyKey(u32);
 struct MyValue(u32);
 
 impl Key for MyKey {
-    fn key_id(&self) -> u32 { self.0 }
+    fn key_id(&self) -> u32 {
+        self.0
+    }
 }
 
 impl Value for MyValue {
-    fn value_id(&self) -> u32 { self.0 }
+    fn value_id(&self) -> u32 {
+        self.0
+    }
 }
 
 crepe! {
@@ -42,17 +46,13 @@ fn test_multiple_generics_with_trait_bounds() {
         Entry(MyKey(2), MyValue(20)),
         Entry(MyKey(3), MyValue(30)),
     ]);
-    
+
     let (flipped,) = runtime.run();
     let mut results: Vec<_> = flipped
         .into_iter()
         .map(|Flipped(v, k)| (v.value_id(), k.key_id()))
         .collect();
     results.sort_unstable();
-    
-    assert_eq!(results, vec![
-        (10, 1),
-        (20, 2),
-        (30, 3),
-    ]);
+
+    assert_eq!(results, vec![(10, 1), (20, 2), (30, 3),]);
 }

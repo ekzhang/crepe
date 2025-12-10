@@ -18,7 +18,9 @@ struct MyKey(u32);
 struct MyValue(&'static str);
 
 impl KeyTrait for MyKey {
-    fn key_value(&self) -> u32 { self.0 }
+    fn key_value(&self) -> u32 {
+        self.0
+    }
 }
 
 impl Debug for MyKey {
@@ -34,7 +36,9 @@ impl Display for MyKey {
 }
 
 impl ValueTrait for MyValue {
-    fn value_text(&self) -> &'static str { self.0 }
+    fn value_text(&self) -> &'static str {
+        self.0
+    }
 }
 
 impl Debug for MyValue {
@@ -67,17 +71,13 @@ fn test_complex_multiple_bounds() {
         Mapping(MyKey(2), MyValue("two")),
         Mapping(MyKey(3), MyValue("three")),
     ]);
-    
+
     let (reversed,) = runtime.run();
     let mut results: Vec<_> = reversed
         .into_iter()
         .map(|Reversed(v, k)| (v.value_text(), k.key_value()))
         .collect();
     results.sort_unstable();
-    
-    assert_eq!(results, vec![
-        ("one", 1),
-        ("three", 3),
-        ("two", 2),
-    ]);
+
+    assert_eq!(results, vec![("one", 1), ("three", 3), ("two", 2),]);
 }

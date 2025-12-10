@@ -40,7 +40,7 @@ impl Strata {
         Self { list, index }
     }
 
-    pub fn iter(&self) -> Iter<Vec<Ident>> {
+    pub fn iter(&self) -> Iter<'_, Vec<Ident>> {
         self.list.iter()
     }
 

@@ -3,6 +3,7 @@
 // Not much is done besides checking that crepe::crepe! is defined,
 // as well as not self-destructing with a compilation error.
 
+#[allow(dead_code)]
 mod datalog {
     use crepe::crepe;
 
