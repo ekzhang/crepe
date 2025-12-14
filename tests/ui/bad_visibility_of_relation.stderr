@@ -1,7 +1,7 @@
 error[E0603]: tuple struct constructor `Test` is private
   --> tests/ui/bad_visibility_of_relation.rs:21:22
    |
-9  |         struct Test(u32);
+ 9 |         struct Test(u32);
    |                     --- a constructor is private if any of the fields is private
 ...
 21 |     let _ = datalog::Test(1);
@@ -10,11 +10,11 @@ error[E0603]: tuple struct constructor `Test` is private
 note: the tuple struct constructor `Test` is defined here
   --> tests/ui/bad_visibility_of_relation.rs:9:9
    |
-9  |         struct Test(u32);
+ 9 |         struct Test(u32);
    |         ^^^^^^^^^^^^^^^^^
 help: consider making the field publicly accessible
    |
-9  |         struct Test(pub u32);
+ 9 |         struct Test(pub u32);
    |                     +++
 
 error[E0603]: tuple struct constructor `MoreTest` is private
